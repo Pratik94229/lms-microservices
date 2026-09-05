@@ -1,3 +1,6 @@
+dotenv:
+  directory: ../
+
 server:
   port: 8081
 
@@ -7,7 +10,7 @@ spring:
 
   data:
     mongodb:
-      uri: mongodb://localhost:27017/lms_user_db
+      uri: ${MONGODB_URI}
 
   security:
     oauth2:
@@ -25,4 +28,4 @@ keycloak:
     server-url: http://localhost:8181
     realm: lms
     client-id: lms-user-service
-    client-secret: REDACTED_KEYCLOAK_SECRET
+    client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET}

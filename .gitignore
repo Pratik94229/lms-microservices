@@ -41,3 +41,7 @@
 
 .DS_Store
 Thumbs.db
+
+# MongoDB backups
+mongo-backup/
+mongo-backup-quiz/
