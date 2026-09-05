@@ -16,7 +16,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:8181/realms/lms
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8181/realms/lms}
 
 eureka:
   client:
@@ -25,7 +25,7 @@ eureka:
 
 keycloak:
   admin:
-    server-url: http://localhost:8181
+    server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8181}
     realm: lms
     client-id: lms-user-service
     client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
