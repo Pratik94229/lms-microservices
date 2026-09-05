@@ -1,0 +1,97 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  # =====================================================
+  # WEBFLUX MULTIPART
+  # =====================================================
+  webflux:
+    multipart:
+      max-in-memory-size: 500MB
+
+  # =====================================================
+  # CLOUD GATEWAY
+  # =====================================================
+  cloud:
+    gateway:
+      server:
+        webflux:
+
+          # =================================================
+          # CORS
+          # =================================================
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/**]':
+                allowedOrigins:
+                  - "http://localhost:5173"
+                allowedMethods:
+                  - GET
+                  - POST
+                  - PUT
+                  - DELETE
+                  - OPTIONS
+                allowedHeaders:
+                  - "*"
+                allowCredentials: true
+
+          # =================================================
+          # ROUTES
+          # =================================================
+          routes:
+
+            # =================================================
+            # USER SERVICE
+            # =================================================
+            - id: user-service
+              uri: lb://USER-SERVICE
+              predicates:
+                - Path=/api/users/**,/api/auth/**
+
+            # =================================================
+            # COURSE SERVICE
+            # =================================================
+            - id: course-service
+              uri: lb://COURSE-SERVICE
+              predicates:
+                - Path=/api/courses/**,/api/sections/**,/api/videos/**,/api/payments/**
+              filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 500MB
+
+            # =================================================
+            # ENROLLMENT
+            # =================================================
+            - id: enrollment-service
+              uri: lb://COURSE-SERVICE
+              predicates:
+                - Path=/api/enrollments/**
+
+            # =================================================
+            # PROGRESS
+            # =================================================
+            - id: progress-service
+              uri: lb://COURSE-SERVICE
+              predicates:
+                - Path=/api/progress/**
+
+            # =================================================
+            # QUIZ SERVICE
+            # =================================================
+            - id: quiz-service
+              uri: lb://QUIZ-SERVICE
+              predicates:
+                - Path=/api/quizzes/**,/api/questions/**,/api/attempts/**
+
+# =============================================================
+# EUREKA
+# =============================================================
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
