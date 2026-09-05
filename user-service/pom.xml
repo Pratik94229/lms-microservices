@@ -15,10 +15,10 @@
 	</parent>
 
 	<groupId>com.lms</groupId>
-	<artifactId>quiz-service</artifactId>
+	<artifactId>user-service</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 
-	<name>quiz-service</name>
+	<name>user-service</name>
 	<description>LMS Quiz Microservice</description>
 
 	<properties>
