@@ -19,15 +19,85 @@ function StudentQuiz() {
   const [error, setError] = useState("");
 
   /*
-   * Prevent automatic submission from running more than once.
+   * Prevent the same attempt from being automatically
+   * submitted more than once.
+   *
+   * This is especially important with React StrictMode,
+   * which can execute effects more than once in development.
    */
-  const autoSubmitTriggered = useRef(false);
+  const autoSubmitAttemptId = useRef(null);
 
   /*
-   * Load quiz information and check for an existing
-   * active attempt.
+   * Prevent duplicate start requests.
+   */
+  const startRequestInProgress = useRef(false);
+
+  /*
+   * =========================================================
+   * BACKEND DATE/TIME PARSER
+   * =========================================================
+   *
+   * Backend currently returns LocalDateTime values such as:
+   *
+   * 2026-09-06T15:30:00
+   *
+   * LocalDateTime has NO timezone information.
+   *
+   * Our Spring Boot/Render backend runs in UTC, so a timezone-less
+   * backend timestamp must be treated as UTC.
+   *
+   * If the backend later returns:
+   *
+   * 2026-09-06T15:30:00Z
+   *
+   * or:
+   *
+   * 2026-09-06T15:30:00+05:30
+   *
+   * those timestamps are already timezone-aware and should be
+   * parsed normally.
+   */
+  const parseBackendDateTime = (value) => {
+    if (!value) {
+      return null;
+    }
+
+    const stringValue = String(value).trim();
+
+    if (!stringValue) {
+      return null;
+    }
+
+    /*
+     * Already timezone-aware:
+     *
+     * 2026-09-06T15:30:00Z
+     * 2026-09-06T15:30:00+05:30
+     */
+    if (stringValue.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(stringValue)) {
+      const date = new Date(stringValue);
+
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    /*
+     * Backend LocalDateTime has no timezone.
+     *
+     * Explicitly treat it as UTC.
+     */
+    const utcDate = new Date(`${stringValue}Z`);
+
+    return Number.isNaN(utcDate.getTime()) ? null : utcDate;
+  };
+
+  /*
+   * =========================================================
+   * LOAD QUIZ
+   * =========================================================
    */
   useEffect(() => {
+    let cancelled = false;
+
     const loadQuiz = async () => {
       try {
         setLoading(true);
@@ -36,11 +106,20 @@ function StudentQuiz() {
         const accessToken = localStorage.getItem("accessToken");
 
         if (!accessToken) {
-          setError("Please login before taking this quiz.");
+          if (!cancelled) {
+            setError("Please login before taking this quiz.");
+          }
           return;
         }
 
+        /*
+         * Load quiz.
+         */
         const quizResponse = await api.get(`/quizzes/${quizId}`);
+
+        if (cancelled) {
+          return;
+        }
 
         setQuiz(quizResponse.data);
 
@@ -52,18 +131,44 @@ function StudentQuiz() {
             `/quizzes/${quizId}/attempts/active`,
           );
 
-          setAttempt(activeAttemptResponse.data);
+          if (cancelled) {
+            return;
+          }
+
+          /*
+           * 200 + attempt = active attempt exists.
+           */
+          if (
+            activeAttemptResponse.status === 200 &&
+            activeAttemptResponse.data
+          ) {
+            setAttempt(activeAttemptResponse.data);
+          }
         } catch (activeAttemptError) {
           /*
            * 404 means there is no active attempt.
+           *
            * This is normal for a new quiz.
            */
-          if (activeAttemptError.response?.status !== 404) {
-            throw activeAttemptError;
+          if (activeAttemptError.response?.status === 404) {
+            return;
           }
+
+          /*
+           * 204 can also mean no active attempt.
+           */
+          if (activeAttemptError.response?.status === 204) {
+            return;
+          }
+
+          throw activeAttemptError;
         }
       } catch (err) {
         console.error("Failed to load quiz:", err);
+
+        if (cancelled) {
+          return;
+        }
 
         if (err.response?.status === 401) {
           setError("Your login session is invalid or expired.");
@@ -75,17 +180,27 @@ function StudentQuiz() {
           setError("Unable to load quiz. Please try again.");
         }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     loadQuiz();
+
+    return () => {
+      cancelled = true;
+    };
   }, [quizId]);
 
   /*
-   * Load saved answers whenever an active attempt exists.
+   * =========================================================
+   * LOAD SAVED ANSWERS
+   * =========================================================
    */
   useEffect(() => {
+    let cancelled = false;
+
     const loadSavedAnswers = async () => {
       if (!attempt?.id || submitted) {
         return;
@@ -94,20 +209,32 @@ function StudentQuiz() {
       try {
         const response = await api.get(`/attempts/${attempt.id}/answers`);
 
+        if (cancelled) {
+          return;
+        }
+
         const answerMap = {};
 
         (response.data || []).forEach((answer) => {
-          answerMap[answer.questionId] = answer.selectedOptionId;
+          if (answer.questionId && answer.selectedOptionId) {
+            answerMap[answer.questionId] = answer.selectedOptionId;
+          }
         });
 
         setSavedAnswers(answerMap);
       } catch (err) {
         console.error("Failed to load saved answers:", err);
 
+        if (cancelled) {
+          return;
+        }
+
         if (err.response?.status === 401) {
           setError("Your login session is invalid or expired.");
         } else if (err.response?.status === 403) {
           setError("You do not have access to this attempt.");
+        } else if (err.response?.status === 404) {
+          setError("Quiz attempt not found.");
         } else {
           setError("Unable to restore your saved answers.");
         }
@@ -115,10 +242,16 @@ function StudentQuiz() {
     };
 
     loadSavedAnswers();
-  }, [attempt, submitted]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt?.id, submitted]);
 
   /*
-   * Questions sorted by order.
+   * =========================================================
+   * QUESTIONS
+   * =========================================================
    */
   const questions = useMemo(() => {
     return [...(quiz?.questions || [])].sort(
@@ -127,15 +260,19 @@ function StudentQuiz() {
   }, [quiz]);
 
   /*
-   * Number of answered questions.
+   * =========================================================
+   * ANSWER COUNT
+   * =========================================================
    */
   const answeredCount = Object.keys(savedAnswers).length;
 
   /*
-   * Format seconds as MM:SS.
+   * =========================================================
+   * FORMAT TIMER
+   * =========================================================
    */
   const formatTime = (seconds) => {
-    if (seconds === null || seconds < 0) {
+    if (seconds === null || seconds === undefined || seconds < 0) {
       return "00:00";
     }
 
@@ -149,16 +286,18 @@ function StudentQuiz() {
   };
 
   /*
-   * Submit the complete quiz attempt.
-   *
-   * confirmSubmission controls whether a browser confirmation
-   * should be displayed.
+   * =========================================================
+   * SUBMIT QUIZ
+   * =========================================================
    */
   const submitQuiz = async (confirmSubmission = true) => {
     if (!attempt?.id || submitting || submitted) {
       return;
     }
 
+    /*
+     * Manual submission confirmation.
+     */
     if (confirmSubmission) {
       const confirmed = window.confirm(
         `You have answered ${answeredCount} of ${questions.length} questions.\n\nAre you sure you want to submit the quiz?`,
@@ -175,6 +314,9 @@ function StudentQuiz() {
 
       const response = await api.post(`/attempts/${attempt.id}/submit`);
 
+      /*
+       * Store final result.
+       */
       setResult(response.data);
       setAttempt(response.data);
       setSubmitted(true);
@@ -191,6 +333,7 @@ function StudentQuiz() {
       } else {
         setError(
           err.response?.data?.message ||
+            err.response?.data?.error ||
             "Unable to submit the quiz. Please try again.",
         );
       }
@@ -204,25 +347,63 @@ function StudentQuiz() {
    * QUIZ TIMER
    * =========================================================
    *
-   * The timer is calculated from:
+   * Timer is based on:
    *
    * attempt.startedAt + quiz.timeLimit
    *
-   * Therefore refreshing the page does not reset the timer.
+   * IMPORTANT:
+   *
+   * The backend LocalDateTime is treated as UTC.
+   *
+   * This prevents the browser's India timezone from incorrectly
+   * making the quiz appear expired immediately.
    */
   useEffect(() => {
-    if (!attempt?.startedAt || !quiz?.timeLimit || submitted) {
+    if (!attempt?.id || !attempt?.startedAt || !quiz?.timeLimit || submitted) {
       setRemainingSeconds(null);
-      return;
+      return undefined;
     }
 
-    autoSubmitTriggered.current = false;
+    /*
+     * Parse backend timestamp correctly.
+     */
+    const startedAt = parseBackendDateTime(attempt.startedAt);
 
+    /*
+     * NEVER automatically submit if the timestamp is invalid.
+     *
+     * This is very important.
+     */
+    if (!startedAt) {
+      console.error("Invalid quiz attempt startedAt:", attempt.startedAt);
+
+      setRemainingSeconds(null);
+      setError(
+        "Unable to calculate the quiz timer. Please refresh and try again.",
+      );
+
+      return undefined;
+    }
+
+    const timeLimitMinutes = Number(quiz.timeLimit);
+
+    /*
+     * Invalid time limit should never trigger submission.
+     */
+    if (!Number.isFinite(timeLimitMinutes) || timeLimitMinutes <= 0) {
+      setRemainingSeconds(null);
+      return undefined;
+    }
+
+    /*
+     * Calculate the exact expiry time.
+     */
+    const endTime = startedAt.getTime() + timeLimitMinutes * 60 * 1000;
+
+    /*
+     * Calculate remaining time.
+     */
     const calculateRemainingTime = () => {
-      const startedAt = new Date(attempt.startedAt);
-
-      const endTime = startedAt.getTime() + Number(quiz.timeLimit) * 60 * 1000;
-
       const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
 
       setRemainingSeconds(remaining);
@@ -230,50 +411,109 @@ function StudentQuiz() {
       return remaining;
     };
 
+    /*
+     * Initial timer calculation.
+     */
     const initialRemaining = calculateRemainingTime();
 
     /*
-     * If the attempt has already expired when the page
-     * loads, submit immediately.
+     * =======================================================
+     * ALREADY EXPIRED
+     * =======================================================
+     *
+     * Only submit when we KNOW the calculated time is actually
+     * zero or less.
      */
-    if (initialRemaining <= 0) {
-      if (!autoSubmitTriggered.current) {
-        autoSubmitTriggered.current = true;
+    if (Number.isFinite(initialRemaining) && initialRemaining <= 0) {
+      /*
+       * Prevent duplicate automatic submissions.
+       */
+      if (autoSubmitAttemptId.current !== attempt.id) {
+        autoSubmitAttemptId.current = attempt.id;
+
         submitQuiz(false);
       }
 
-      return;
+      return undefined;
     }
 
+    /*
+     * =======================================================
+     * RUN TIMER
+     * =======================================================
+     */
     const timer = setInterval(() => {
       const remaining = calculateRemainingTime();
 
-      if (remaining <= 0) {
+      /*
+       * Only auto-submit when remaining time is genuinely zero.
+       */
+      if (Number.isFinite(remaining) && remaining <= 0) {
         clearInterval(timer);
 
-        if (!autoSubmitTriggered.current) {
-          autoSubmitTriggered.current = true;
+        /*
+         * Prevent duplicate automatic submission.
+         */
+        if (autoSubmitAttemptId.current !== attempt.id) {
+          autoSubmitAttemptId.current = attempt.id;
+
           submitQuiz(false);
         }
       }
     }, 1000);
 
+    /*
+     * Cleanup timer.
+     */
     return () => {
       clearInterval(timer);
     };
-  }, [attempt, quiz, submitted]);
+  }, [attempt?.id, attempt?.startedAt, quiz?.timeLimit, submitted]);
 
   /*
-   * Start a new attempt.
+   * =========================================================
+   * START QUIZ
+   * =========================================================
    */
   const handleStartQuiz = async () => {
+    /*
+     * Prevent duplicate requests.
+     */
+    if (starting || startRequestInProgress.current || attempt?.id) {
+      return;
+    }
+
+    /*
+     * Quiz must contain questions.
+     */
+    if (questions.length === 0) {
+      setError("This quiz does not have any questions yet.");
+      return;
+    }
+
     try {
+      startRequestInProgress.current = true;
+
       setStarting(true);
       setError("");
 
       const response = await api.post(`/quizzes/${quizId}/attempts`);
 
-      setAttempt(response.data);
+      if (response.data) {
+        /*
+         * Reset quiz state for new attempt.
+         */
+        setAttempt(response.data);
+        setSavedAnswers({});
+        setSubmitted(false);
+        setResult(null);
+        setRemainingSeconds(null);
+
+        /*
+         * Allow this attempt to use automatic submission.
+         */
+        autoSubmitAttemptId.current = null;
+      }
     } catch (err) {
       console.error("Failed to start quiz:", err);
 
@@ -284,15 +524,22 @@ function StudentQuiz() {
       } else if (err.response?.status === 404) {
         setError("Quiz not found.");
       } else {
-        setError("Unable to start the quiz. Please try again.");
+        setError(
+          err.response?.data?.message ||
+            err.response?.data?.error ||
+            "Unable to start the quiz. Please try again.",
+        );
       }
     } finally {
       setStarting(false);
+      startRequestInProgress.current = false;
     }
   };
 
   /*
-   * Save/update one answer.
+   * =========================================================
+   * SAVE / UPDATE ANSWER
+   * =========================================================
    */
   const handleAnswerChange = async (questionId, selectedOptionId) => {
     if (!attempt?.id || submitted) {
@@ -342,7 +589,11 @@ function StudentQuiz() {
       } else if (err.response?.status === 404) {
         setError("Quiz attempt not found.");
       } else {
-        setError("Unable to save your answer. Please try again.");
+        setError(
+          err.response?.data?.message ||
+            err.response?.data?.error ||
+            "Unable to save your answer. Please try again.",
+        );
       }
     } finally {
       setSavingQuestionId(null);
@@ -350,7 +601,9 @@ function StudentQuiz() {
   };
 
   /*
-   * Loading state.
+   * =========================================================
+   * LOADING STATE
+   * =========================================================
    */
   if (loading) {
     return (
@@ -361,7 +614,9 @@ function StudentQuiz() {
   }
 
   /*
-   * Error state when quiz itself cannot be loaded.
+   * =========================================================
+   * ERROR STATE
+   * =========================================================
    */
   if (error && !quiz) {
     return (
@@ -382,7 +637,9 @@ function StudentQuiz() {
   }
 
   /*
-   * Quiz not found.
+   * =========================================================
+   * QUIZ NOT FOUND
+   * =========================================================
    */
   if (!quiz) {
     return (
