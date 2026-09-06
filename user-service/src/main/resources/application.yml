@@ -27,6 +27,7 @@ eureka:
     non-secure-port-enabled: false
     secure-port-enabled: true
     secure-port: 443
+    instance-id: ${EUREKA_INSTANCE_HOSTNAME:localhost}:443
     status-page-url: https://${EUREKA_INSTANCE_HOSTNAME:localhost}/actuator/info
     health-check-url: https://${EUREKA_INSTANCE_HOSTNAME:localhost}/actuator/health
     home-page-url: https://${EUREKA_INSTANCE_HOSTNAME:localhost}/
