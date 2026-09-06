@@ -25,6 +25,17 @@ eureka:
     service-url:
       defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
 
+  instance:
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
+    prefer-ip-address: false
+    non-secure-port-enabled: false
+    secure-port-enabled: true
+    secure-port: 443
+    instance-id: ${EUREKA_INSTANCE_HOSTNAME:localhost}:443
+    status-page-url: https://${EUREKA_INSTANCE_HOSTNAME:localhost}/actuator/info
+    health-check-url: https://${EUREKA_INSTANCE_HOSTNAME:localhost}/actuator/health
+    home-page-url: https://${EUREKA_INSTANCE_HOSTNAME:localhost}/
+
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME}
   api-key: ${CLOUDINARY_API_KEY}
