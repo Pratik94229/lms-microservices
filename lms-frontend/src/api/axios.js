@@ -3,7 +3,7 @@ import keycloak from "../keycloak";
 import { setAccessToken, removeAccessToken } from "../utils/auth";
 
 const api = axios.create({
-  baseURL: "http://localhost:8080/api",
+  baseURL: "https://lms-api-gateway-9lpv.onrender.com/api",
 });
 
 // Attach a valid Keycloak JWT to every request.

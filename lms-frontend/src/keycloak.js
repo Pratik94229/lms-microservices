@@ -1,7 +1,7 @@
 import Keycloak from "keycloak-js";
 
 const keycloak = new Keycloak({
-  url: "http://localhost:8181",
+  url: "https://lms-keycloak.onrender.com",
   realm: "lms",
   clientId: "lms-client",
 });
