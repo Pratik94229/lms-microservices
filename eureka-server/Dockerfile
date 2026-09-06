@@ -13,6 +13,6 @@ COPY src src
 
 RUN ./mvnw clean package -DskipTests
 
-EXPOSE 10000
+EXPOSE 8761
 
 ENTRYPOINT ["java", "-jar", "target/eureka-server-0.0.1-SNAPSHOT.jar"]

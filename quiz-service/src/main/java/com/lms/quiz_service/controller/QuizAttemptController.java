@@ -1,10 +1,13 @@
 package com.lms.quiz_service.controller;
 
 import com.lms.quiz_service.dto.AttemptResponse;
+import com.lms.quiz_service.exception.AttemptNotFoundException;
 import com.lms.quiz_service.service.QuizAttemptService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -52,18 +55,26 @@ public class QuizAttemptController {
      * for this quiz.
      */
     @GetMapping("/{quizId}/attempts/active")
-    @PreAuthorize("hasRole('STUDENT')")
-    public AttemptResponse getActiveAttempt(
+    public ResponseEntity<AttemptResponse> getActiveAttempt(
             @PathVariable String quizId,
-            @AuthenticationPrincipal Jwt jwt
+            Authentication authentication
     ) {
 
-        String studentId = jwt.getSubject();
+        String studentId = authentication.getName();
 
-        return quizAttemptService.getActiveAttempt(
-                quizId,
-                studentId
-        );
+        try {
+            AttemptResponse attempt =
+                    quizAttemptService.getActiveAttempt(
+                            quizId,
+                            studentId
+                    );
+
+            return ResponseEntity.ok(attempt);
+
+        } catch (AttemptNotFoundException e) {
+
+            return ResponseEntity.noContent().build();
+        }
     }
 
 
