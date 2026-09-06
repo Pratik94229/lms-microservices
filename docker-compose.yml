@@ -1,42 +1,5 @@
 services:
 
-  keycloak-db:
-    image: postgres:16
-    container_name: lms-keycloak-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloak-local-password
-    volumes:
-      - keycloak-db-data:/var/lib/postgresql/data
-    networks:
-      - lms-network
-
-  keycloak:
-    build:
-      context: ./keycloak
-    container_name: lms-keycloak
-    restart: unless-stopped
-    depends_on:
-      - keycloak-db
-    environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak-local-password
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-local-password
-      KC_HTTP_ENABLED: "true"
-      KC_HTTP_PORT: 8181
-      KEYCLOAK_HOSTNAME: localhost
-    ports:
-      - "8181:8181"
-    volumes:
-      - ./keycloak/lms-realm.json:/opt/keycloak/realm/lms-realm.json:ro
-    networks:
-      - lms-network
-
   eureka-server:
     build:
       context: ./eureka-server
@@ -56,13 +19,11 @@ services:
     restart: unless-stopped
     depends_on:
       - eureka-server
-      - keycloak
     environment:
       PORT: 8081
       MONGODB_URI: ${MONGODB_URI}
-      KEYCLOAK_JWK_SET_URI: http://keycloak:8181/realms/lms/protocol/openid-connect/certs
-      KEYCLOAK_SERVER_URL: http://keycloak:8181
-      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-7200000}
       EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
     ports:
       - "8081:8081"
@@ -76,11 +37,10 @@ services:
     restart: unless-stopped
     depends_on:
       - eureka-server
-      - keycloak
     environment:
       PORT: 8082
       MONGODB_COURSE_URI: ${MONGODB_COURSE_URI}
-      KEYCLOAK_JWK_SET_URI: http://keycloak:8181/realms/lms/protocol/openid-connect/certs
+      JWT_SECRET: ${JWT_SECRET}
       EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
@@ -100,11 +60,10 @@ services:
     restart: unless-stopped
     depends_on:
       - eureka-server
-      - keycloak
     environment:
       PORT: 8083
       MONGODB_QUIZ_URI: ${MONGODB_QUIZ_URI}
-      KEYCLOAK_JWK_SET_URI: http://keycloak:8181/realms/lms/protocol/openid-connect/certs
+      JWT_SECRET: ${JWT_SECRET}
       EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
     ports:
       - "8083:8083"
@@ -125,9 +84,6 @@ services:
       - "8080:8080"
     networks:
       - lms-network
-
-volumes:
-  keycloak-db-data:
 
 networks:
   lms-network:

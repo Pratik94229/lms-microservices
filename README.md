@@ -10,12 +10,16 @@ The application provides course management, video-based lessons, quizzes, studen
 
 ### Authentication and Authorization
 
-- Keycloak-based authentication
+- Custom JWT-based authentication
+- Username and password login
+- BCrypt password hashing
 - JWT-based authorization
+- Stateless backend authentication
 - Role-based access control
 - Student, Instructor, and Admin roles
 - Protected frontend routes
 - Independent JWT validation in backend services
+- Shared JWT secret across backend services
 
 ### Student Features
 
@@ -77,7 +81,10 @@ The application provides course management, video-based lessons, quizzes, studen
                          ┌─────────────────┐
                          │   React Client  │
                          │    Vite + JS    │
+                         │     Vercel      │
                          └────────┬────────┘
+                                  │
+                             JWT Bearer
                                   │
                                   ▼
                          ┌─────────────────┐
@@ -88,24 +95,18 @@ The application provides course management, video-based lessons, quizzes, studen
              ┌────────────────────┼────────────────────┐
              │                    │                    │
              ▼                    ▼                    ▼
-      ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-      │ User Service│      │Course Service│      │ Quiz Service│
-      │    :8081    │      │    :8082    │      │    :8083    │
-      └──────┬──────┘      └──────┬──────┘      └──────┬──────┘
-             │                    │                    │
-             │                    │                    │
-             ▼                    ▼                    ▼
-        MongoDB User        MongoDB Course       MongoDB Quiz
-             │                    │
-             │                    ├── Cloudinary
-             │                    │
-             │                    └── PayPal
-             │
-             ▼
-        ┌───────────┐
-        │ Keycloak  │
-        │   :8181   │
-        └───────────┘
+      ┌─────────────┐      ┌────────────-─┐      ┌─────────────--┐
+      │ User Service│      │Course Service│      │ Quiz Service  │
+      │    :8081    │      │    :8082     │      │    :8083      │
+      │ JWT + BCrypt│      │ JWT Validate │      │ JWT Validate  │
+      └──────┬──────┘      └──────┬──────-┘      └──────┬─────--─┘
+             │                    │                     │
+             ▼                    ▼                     ▼
+        MongoDB User        MongoDB Course        MongoDB Quiz
+                                  │
+                                  ├── Cloudinary
+                                  │
+                                  └── PayPal
 
                          ┌─────────────────┐
                          │ Eureka Server   │
