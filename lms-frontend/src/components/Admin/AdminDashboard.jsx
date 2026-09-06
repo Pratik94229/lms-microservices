@@ -19,24 +19,15 @@ function AdminDashboard() {
 
   /*
    * =========================================================
-   * GET PRIMARY LMS ROLE
+   * GET LMS ROLE
    * =========================================================
+   *
+   * User Service now stores a single LMS role directly
+   * on the User object.
    */
 
-  const getLmsRole = (roles = []) => {
-    if (roles.includes("ADMIN")) {
-      return "ADMIN";
-    }
-
-    if (roles.includes("INSTRUCTOR")) {
-      return "INSTRUCTOR";
-    }
-
-    if (roles.includes("STUDENT")) {
-      return "STUDENT";
-    }
-
-    return null;
+  const getLmsRole = (user) => {
+    return user?.role || null;
   };
 
   /*
@@ -58,11 +49,11 @@ function AdminDashboard() {
 
       const initialRoles = {};
 
-      loadedUsers.forEach((item) => {
-        const role = getLmsRole(item.roles);
+      loadedUsers.forEach((user) => {
+        const role = getLmsRole(user);
 
-        if (role && item.user?.keycloakUserId) {
-          initialRoles[item.user.keycloakUserId] = role;
+        if (role && user?.id) {
+          initialRoles[user.id] = role;
         }
       });
 
@@ -125,10 +116,10 @@ function AdminDashboard() {
    * =========================================================
    */
 
-  const handleRoleChange = (keycloakUserId, role) => {
+  const handleRoleChange = (userId, role) => {
     setSelectedRoles((previous) => ({
       ...previous,
-      [keycloakUserId]: role,
+      [userId]: role,
     }));
 
     setSuccessMessage("");
@@ -141,19 +132,19 @@ function AdminDashboard() {
    * =========================================================
    */
 
-  const handleSaveRole = async (keycloakUserId) => {
-    const role = selectedRoles[keycloakUserId];
+  const handleSaveRole = async (userId) => {
+    const role = selectedRoles[userId];
 
     if (!role) {
       return;
     }
 
     try {
-      setUpdatingUserId(keycloakUserId);
+      setUpdatingUserId(userId);
       setError("");
       setSuccessMessage("");
 
-      const response = await api.put(`/users/${keycloakUserId}/role`, {
+      const response = await api.put(`/users/${userId}/role`, {
         role,
       });
 
@@ -189,13 +180,11 @@ function AdminDashboard() {
    */
 
   const handleDeleteUser = async (user) => {
-    const keycloakUserId = user?.keycloakUserId;
+    const userId = user?.id;
     const username = user?.username || "this user";
 
-    if (!keycloakUserId) {
-      setError(
-        "Unable to delete this user because the Keycloak ID is missing.",
-      );
+    if (!userId) {
+      setError("Unable to delete this user because the user ID is missing.");
       return;
     }
 
@@ -205,10 +194,10 @@ function AdminDashboard() {
      * Do not allow the currently logged-in admin to
      * accidentally delete their own account.
      */
+
     const confirmed = window.confirm(
       `Are you sure you want to delete "${username}"?\n\n` +
-        "This will permanently remove the user's LMS profile " +
-        "and Keycloak account.",
+        "This will permanently remove the user's LMS account.",
     );
 
     if (!confirmed) {
@@ -216,11 +205,11 @@ function AdminDashboard() {
     }
 
     try {
-      setDeletingUserId(keycloakUserId);
+      setDeletingUserId(userId);
       setError("");
       setSuccessMessage("");
 
-      const response = await api.delete(`/users/${keycloakUserId}`);
+      const response = await api.delete(`/users/${userId}`);
 
       console.log("User deletion response:", response.data);
 
@@ -297,19 +286,17 @@ function AdminDashboard() {
    * =========================================================
    */
 
-  const profilesWithPhone = users.filter((item) => item.user?.phone).length;
+  const profilesWithPhone = users.filter((user) => user?.phone).length;
 
   const students = users.filter(
-    (item) => getLmsRole(item.roles) === "STUDENT",
+    (user) => getLmsRole(user) === "STUDENT",
   ).length;
 
   const instructors = users.filter(
-    (item) => getLmsRole(item.roles) === "INSTRUCTOR",
+    (user) => getLmsRole(user) === "INSTRUCTOR",
   ).length;
 
-  const admins = users.filter(
-    (item) => getLmsRole(item.roles) === "ADMIN",
-  ).length;
+  const admins = users.filter((user) => getLmsRole(user) === "ADMIN").length;
 
   /*
    * =========================================================
@@ -447,22 +434,19 @@ function AdminDashboard() {
                 </thead>
 
                 <tbody>
-                  {users.map((item) => {
-                    const user = item.user;
+                  {users.map((user) => {
+                    const currentRole = getLmsRole(user);
 
-                    const currentRole = getLmsRole(item.roles);
-
-                    const selectedRole =
-                      selectedRoles[user?.keycloakUserId] || "";
+                    const selectedRole = selectedRoles[user?.id] || "";
 
                     const fullName =
                       [user?.firstName, user?.lastName]
                         .filter(Boolean)
                         .join(" ") || "—";
 
-                    const isUpdating = updatingUserId === user?.keycloakUserId;
+                    const isUpdating = updatingUserId === user?.id;
 
-                    const isDeleting = deletingUserId === user?.keycloakUserId;
+                    const isDeleting = deletingUserId === user?.id;
 
                     return (
                       <tr
@@ -522,10 +506,7 @@ function AdminDashboard() {
                             <select
                               value={selectedRole}
                               onChange={(event) =>
-                                handleRoleChange(
-                                  user?.keycloakUserId,
-                                  event.target.value,
-                                )
+                                handleRoleChange(user?.id, event.target.value)
                               }
                               disabled={isUpdating || isDeleting}
                               className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-gray-100"
@@ -541,11 +522,12 @@ function AdminDashboard() {
                           </div>
                         </td>
 
-                        {/* Save Role */}
+                        {/* Action */}
+
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <Link
-                              to={`/admin/users/${user?.keycloakUserId}`}
+                              to={`/admin/users/${user?.id}`}
                               className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 transition hover:border-primary hover:text-primary"
                             >
                               View Details
@@ -553,9 +535,7 @@ function AdminDashboard() {
 
                             <button
                               type="button"
-                              onClick={() =>
-                                handleSaveRole(user?.keycloakUserId)
-                              }
+                              onClick={() => handleSaveRole(user?.id)}
                               disabled={
                                 isUpdating ||
                                 isDeleting ||

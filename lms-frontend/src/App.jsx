@@ -139,7 +139,7 @@ function App() {
           />
 
           <Route
-            path="/admin/users/:keycloakUserId"
+            path="/admin/users/:userId"
             element={
               <ProtectedRoute>
                 <AdminUserDetails />

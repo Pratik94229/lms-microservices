@@ -1,58 +1,41 @@
 import axios from "axios";
-import keycloak from "../keycloak";
-import { setAccessToken, removeAccessToken } from "../utils/auth";
+import { getAccessToken, clearAccessToken } from "../utils/auth";
 
 const api = axios.create({
   baseURL: "https://lms-api-gateway-9lpv.onrender.com/api",
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-// Attach a valid Keycloak JWT to every request.
+// Attach our custom JWT to every API request.
 api.interceptors.request.use(
-  async (config) => {
-    // Only attempt token handling when Keycloak
-    // has an authenticated user.
-    if (keycloak.authenticated) {
-      try {
-        // Refresh the token if it expires within
-        // the next 30 seconds.
-        await keycloak.updateToken(30);
+  (config) => {
+    const token = getAccessToken();
 
-        // Keep localStorage synchronized with
-        // the current Keycloak token.
-        if (keycloak.token) {
-          setAccessToken(keycloak.token);
-
-          config.headers.Authorization = `Bearer ${keycloak.token}`;
-        }
-      } catch (error) {
-        console.error("Failed to refresh Keycloak token:", error);
-
-        // Remove the stale locally stored token.
-        removeAccessToken();
-
-        // Reject the request because we cannot
-        // safely send an expired/invalid token.
-        return Promise.reject(error);
-      }
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
     return config;
   },
-  (error) => Promise.reject(error),
+  (error) => Promise.reject(error)
 );
 
-// Handle authentication failures centrally.
+// If the backend rejects the JWT, clear the local session.
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
+  (error) => {
     if (error.response?.status === 401) {
-      console.warn("Authentication failed.");
+      clearAccessToken();
 
-      removeAccessToken();
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
     }
 
     return Promise.reject(error);
-  },
+  }
 );
 
 export default api;

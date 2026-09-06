@@ -1,120 +1,96 @@
-import keycloak from "../keycloak";
-
-// Key used to store the JWT access token in browser localStorage.
 const TOKEN_KEY = "accessToken";
+const USER_KEY = "currentUser";
 
-// Custom browser event used to notify React components
-// whenever the user's authentication state changes.
-const AUTH_EVENT = "auth-changed";
-
-// Get the current Keycloak access token.
-//
-// Keycloak is now the source of truth for authentication.
-// localStorage is kept in sync because the existing
-// application already uses it.
 export const getAccessToken = () => {
-  return keycloak.token || localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY);
 };
 
-// Store the JWT access token in localStorage.
-//
-// Keycloak itself continues to manage the active token.
 export const setAccessToken = (token) => {
   if (token) {
     localStorage.setItem(TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
   }
-
-  window.dispatchEvent(new Event(AUTH_EVENT));
 };
 
-// Remove the locally stored access token.
-//
-// This does NOT log the user out of Keycloak.
-// Keycloak logout will be handled separately.
-export const removeAccessToken = () => {
+export const clearAccessToken = () => {
   localStorage.removeItem(TOKEN_KEY);
-
-  window.dispatchEvent(new Event(AUTH_EVENT));
+  localStorage.removeItem(USER_KEY);
 };
 
-// Check whether the user is authenticated.
-export const isAuthenticated = () => {
-  return Boolean(keycloak.authenticated && keycloak.token);
-};
+export const getCurrentUser = () => {
+  const user = localStorage.getItem(USER_KEY);
 
-// Register a listener for authentication changes.
-export const addAuthListener = (callback) => {
-  window.addEventListener(AUTH_EVENT, callback);
-
-  return () => {
-    window.removeEventListener(AUTH_EVENT, callback);
-  };
-};
-
-// Decode the payload section of the JWT.
-//
-// IMPORTANT:
-// This only decodes the JWT.
-// It does NOT verify the token.
-// Token validation is performed by the backend.
-const decodeTokenPayload = () => {
-  const token = getAccessToken();
-
-  if (!token) {
+  if (!user) {
     return null;
   }
 
   try {
-    const payload = token.split(".")[1];
-
-    if (!payload) {
-      return null;
-    }
-
-    // JWT payload is Base64URL encoded.
-    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-
-    // Add missing Base64 padding if necessary.
-    const paddedBase64 = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-
-    const decodedPayload = atob(paddedBase64);
-
-    return JSON.parse(decodedPayload);
-  } catch (error) {
-    console.error("Failed to decode JWT:", error);
+    return JSON.parse(user);
+  } catch {
+    localStorage.removeItem(USER_KEY);
     return null;
   }
 };
 
-// Get all Keycloak realm roles assigned to the user.
-export const getUserRoles = () => {
-  const payload = decodeTokenPayload();
-
-  if (!payload) {
-    return [];
+export const setCurrentUser = (user) => {
+  if (user) {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
   }
-
-  return payload.realm_access?.roles || [];
 };
 
-// Check whether the current user has a specific role.
+export const isAuthenticated = () => {
+  return Boolean(getAccessToken());
+};
+
+export const getUserRole = () => {
+  const user = getCurrentUser();
+  return user?.role || null;
+};
+
+export const getUserRoles = () => {
+  const role = getUserRole();
+  return role ? [role] : [];
+};
+
 export const hasRole = (role) => {
-  return getUserRoles().includes(role);
+  return getUserRole() === role;
 };
 
-// Check whether the current user has the STUDENT role.
-export const isStudent = () => {
-  return hasRole("STUDENT");
+export const hasAnyRole = (roles = []) => {
+  const role = getUserRole();
+  return roles.includes(role);
 };
 
-// Check whether the current user has the INSTRUCTOR role.
-export const isInstructor = () => {
-  return hasRole("INSTRUCTOR");
-};
-
-// Check whether the current user has the ADMIN role.
 export const isAdmin = () => {
-  return hasRole("ADMIN");
+  return getUserRole() === "ADMIN";
+};
+
+export const isInstructor = () => {
+  return getUserRole() === "INSTRUCTOR";
+};
+
+export const isStudent = () => {
+  return getUserRole() === "STUDENT";
+};
+
+export const addAuthListener = (callback) => {
+  const handleStorageChange = (event) => {
+    if (event.key === TOKEN_KEY || event.key === USER_KEY) {
+      callback();
+    }
+  };
+
+  window.addEventListener("storage", handleStorageChange);
+
+  return () => {
+    window.removeEventListener("storage", handleStorageChange);
+  };
+};
+
+export const removeAccessToken = () => {
+  clearAccessToken();
+};
+
+export const logout = () => {
+  clearAccessToken();
+  window.location.href = "/login";
 };

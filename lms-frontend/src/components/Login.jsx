@@ -1,39 +1,87 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import keycloak from "../keycloak";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import api from "../api/axios";
+import { getAccessToken, setAccessToken, setCurrentUser } from "../utils/auth";
 
 function Login() {
   const location = useLocation();
+  const navigate = useNavigate();
 
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    // If the user is already authenticated,
-    // there is no need to show the login page.
-    if (keycloak.authenticated) {
+    if (getAccessToken()) {
       const destination = location.state?.from || "/";
-
-      window.location.replace(destination);
+      navigate(destination, { replace: true });
     }
-  }, [location.state]);
+  }, [location.state, navigate]);
 
-  const handleLogin = async () => {
+  const handleLogin = async (event) => {
+    event.preventDefault();
+
+    setError("");
+
+    if (!username.trim() || !password) {
+      setError("Please enter your username and password.");
+      return;
+    }
+
     try {
       setLoading(true);
 
-      // Get the page the user originally wanted to visit.
+      const response = await api.post("/auth/login", {
+        username: username.trim(),
+        password,
+      });
+
+      const data = response.data;
+
+      /*
+       * User Service returns the JWT together with
+       * the authenticated user's information.
+       */
+      const token = data.token || data.accessToken || data.jwt;
+
+      if (!token) {
+        throw new Error("Login succeeded but no access token was returned.");
+      }
+
+      setAccessToken(token);
+
+      if (data.user) {
+        setCurrentUser(data.user);
+      } else {
+        /*
+         * Store the user information when it is returned
+         * directly in the login response.
+         */
+        setCurrentUser({
+          id: data.id || data.userId,
+          username: data.username,
+          email: data.email,
+          role: data.role,
+          firstName: data.firstName,
+          lastName: data.lastName,
+        });
+      }
+
       const destination = location.state?.from || "/";
 
-      // Build the redirect URL.
-      const redirectUri = `${window.location.origin}${destination}`;
+      navigate(destination, { replace: true });
+    } catch (err) {
+      console.error("Login failed:", err);
 
-      // Open the Keycloak browser login page.
-      await keycloak.login({
-        redirectUri,
-      });
-    } catch (error) {
-      console.error("Keycloak login failed:", error);
-
+      if (err.response?.status === 401) {
+        setError("Invalid username or password.");
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError("Unable to login. Please try again.");
+      }
+    } finally {
       setLoading(false);
     }
   };
@@ -47,8 +95,6 @@ function Login() {
           ====================================================== */}
 
           <div className="text-center">
-            {/* LMS logo */}
-
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary text-xl font-bold text-white shadow-md">
               L
             </div>
@@ -66,26 +112,74 @@ function Login() {
           </div>
 
           {/* =====================================================
-              LOGIN ACTION
+              ERROR
           ====================================================== */}
 
-          <div className="mt-8">
-            <button
-              type="button"
-              onClick={handleLogin}
-              disabled={loading}
-              className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:opacity-95 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "Opening Secure Login..." : "Continue to Login"}
-            </button>
-
-            <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-              <p className="text-center text-xs leading-5 text-muted">
-                You will be redirected to our secure authentication service to
-                enter your login credentials.
-              </p>
+          {error && (
+            <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm text-red-600">{error}</p>
             </div>
-          </div>
+          )}
+
+          {/* =====================================================
+              LOGIN FORM
+          ====================================================== */}
+
+          <form onSubmit={handleLogin} className="mt-8">
+            {/* Username */}
+
+            <div>
+              <label
+                htmlFor="username"
+                className="block text-sm font-medium text-dark"
+              >
+                Username
+              </label>
+
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="Enter your username"
+                autoComplete="username"
+                disabled={loading}
+                className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-gray-100"
+              />
+            </div>
+
+            {/* Password */}
+
+            <div className="mt-5">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-dark"
+              >
+                Password
+              </label>
+
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                disabled={loading}
+                className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-gray-100"
+              />
+            </div>
+
+            {/* Login button */}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-6 w-full rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:opacity-95 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? "Signing In..." : "Sign In"}
+            </button>
+          </form>
 
           {/* =====================================================
               REGISTER
@@ -117,8 +211,8 @@ function Login() {
                 </p>
 
                 <p className="mt-1 text-xs leading-5 text-muted">
-                  Your credentials are handled by Keycloak and are never sent
-                  directly through the LMS application.
+                  Your password is securely processed by the LMS authentication
+                  service and is never stored in your browser.
                 </p>
               </div>
             </div>

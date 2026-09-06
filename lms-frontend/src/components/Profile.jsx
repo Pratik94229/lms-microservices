@@ -497,7 +497,7 @@ function Profile() {
               </p>
             </div>
 
-            {/* Keycloak ID */}
+            {/* Account ID */}
 
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted">
@@ -505,7 +505,7 @@ function Profile() {
               </p>
 
               <p className="mt-2 break-all text-xs font-medium text-muted">
-                {profile?.keycloakUserId || "—"}
+                {profile?.id || "—"}
               </p>
             </div>
           </div>

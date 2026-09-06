@@ -5,33 +5,11 @@ import { isAdmin } from "../../utils/auth";
 
 function AdminUserDetails() {
   const navigate = useNavigate();
-  const { keycloakUserId } = useParams();
+  const { userId } = useParams();
 
-  const [userItem, setUserItem] = useState(null);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  /*
-   * =========================================================
-   * GET PRIMARY LMS ROLE
-   * =========================================================
-   */
-
-  const getLmsRole = (roles = []) => {
-    if (roles.includes("ADMIN")) {
-      return "ADMIN";
-    }
-
-    if (roles.includes("INSTRUCTOR")) {
-      return "INSTRUCTOR";
-    }
-
-    if (roles.includes("STUDENT")) {
-      return "STUDENT";
-    }
-
-    return null;
-  };
 
   /*
    * =========================================================
@@ -60,15 +38,9 @@ function AdminUserDetails() {
    * LOAD USER
    * =========================================================
    *
-   * We use the existing:
+   * GET /api/users returns the User objects directly.
    *
-   * GET /api/users
-   *
-   * endpoint.
-   *
-   * We do not need a new backend endpoint because the
-   * Admin API already returns the complete User object
-   * together with Keycloak roles.
+   * The MongoDB user ID is now the account identifier.
    */
 
   useEffect(() => {
@@ -86,16 +58,14 @@ function AdminUserDetails() {
 
         const users = response.data || [];
 
-        const foundUser = users.find(
-          (item) => item.user?.keycloakUserId === keycloakUserId,
-        );
+        const foundUser = users.find((item) => item?.id === userId);
 
         if (!foundUser) {
           setError("User not found.");
           return;
         }
 
-        setUserItem(foundUser);
+        setUser(foundUser);
       } catch (err) {
         console.error("Failed to load user details:", err);
 
@@ -115,7 +85,7 @@ function AdminUserDetails() {
     };
 
     loadUser();
-  }, [navigate, keycloakUserId]);
+  }, [navigate, userId]);
 
   /*
    * =========================================================
@@ -139,7 +109,7 @@ function AdminUserDetails() {
    * =========================================================
    */
 
-  if (error || !userItem) {
+  if (error || !user) {
     return (
       <main className="min-h-[calc(100vh-80px)] bg-secondary px-6 py-12">
         <div className="mx-auto max-w-4xl">
@@ -160,13 +130,10 @@ function AdminUserDetails() {
     );
   }
 
-  const user = userItem.user;
-
-  const role = getLmsRole(userItem.roles);
+  const role = user.role || null;
 
   const fullName =
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-    "Not provided";
+    [user.firstName, user.lastName].filter(Boolean).join(" ") || "Not provided";
 
   /*
    * =========================================================
@@ -193,14 +160,14 @@ function AdminUserDetails() {
             {/* Profile Image / Initial */}
 
             <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-3xl font-bold text-primary">
-              {user?.profileImage ? (
+              {user.profileImage ? (
                 <img
                   src={user.profileImage}
                   alt={user.username || "User"}
                   className="h-full w-full object-cover"
                 />
               ) : (
-                user?.username?.charAt(0)?.toUpperCase() || "U"
+                user.username?.charAt(0)?.toUpperCase() || "U"
               )}
             </div>
 
@@ -212,11 +179,11 @@ function AdminUserDetails() {
               </p>
 
               <h1 className="mt-1 text-3xl font-bold text-dark">
-                {user?.username || "Unknown User"}
+                {user.username || "Unknown User"}
               </h1>
 
               <p className="mt-2 text-muted">
-                {user?.email || "No email provided"}
+                {user.email || "No email provided"}
               </p>
 
               <div className="mt-4">
@@ -254,7 +221,7 @@ function AdminUserDetails() {
               </p>
 
               <p className="mt-2 font-semibold text-dark">
-                {user?.username || "Not provided"}
+                {user.username || "Not provided"}
               </p>
             </div>
 
@@ -265,8 +232,8 @@ function AdminUserDetails() {
                 Email
               </p>
 
-              <p className="mt-2 font-semibold text-dark break-all">
-                {user?.email || "Not provided"}
+              <p className="mt-2 break-all font-semibold text-dark">
+                {user.email || "Not provided"}
               </p>
             </div>
 
@@ -278,7 +245,7 @@ function AdminUserDetails() {
               </p>
 
               <p className="mt-2 font-semibold text-dark">
-                {user?.firstName || "Not provided"}
+                {user.firstName || "Not provided"}
               </p>
             </div>
 
@@ -290,7 +257,7 @@ function AdminUserDetails() {
               </p>
 
               <p className="mt-2 font-semibold text-dark">
-                {user?.lastName || "Not provided"}
+                {user.lastName || "Not provided"}
               </p>
             </div>
 
@@ -312,7 +279,7 @@ function AdminUserDetails() {
               </p>
 
               <p className="mt-2 font-semibold text-dark">
-                {user?.phone || "Not provided"}
+                {user.phone || "Not provided"}
               </p>
             </div>
 
@@ -342,7 +309,7 @@ function AdminUserDetails() {
               </p>
 
               <p className="mt-2 break-all text-sm text-dark">
-                {user?.profileImage || "Not provided"}
+                {user.profileImage || "Not provided"}
               </p>
             </div>
           </div>
@@ -357,61 +324,20 @@ function AdminUserDetails() {
             </p>
 
             <h2 className="mt-1 text-xl font-bold text-dark">
-              Account Identifiers
+              Account Identifier
             </h2>
           </div>
 
-          <div className="grid gap-6 p-6 sm:grid-cols-2">
-            {/* MongoDB ID */}
-
+          <div className="p-6">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-                LMS Profile ID
+                LMS User ID
               </p>
 
               <p className="mt-2 break-all font-mono text-sm text-dark">
-                {user?.id || "Not available"}
+                {user.id || "Not available"}
               </p>
             </div>
-
-            {/* Keycloak ID */}
-
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-                Keycloak User ID
-              </p>
-
-              <p className="mt-2 break-all font-mono text-sm text-dark">
-                {user?.keycloakUserId || "Not available"}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Keycloak Roles */}
-
-        <section className="mt-6 rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-6 py-5">
-            <p className="text-sm font-semibold uppercase tracking-wider text-primary">
-              Authorization
-            </p>
-
-            <h2 className="mt-1 text-xl font-bold text-dark">
-              Keycloak Realm Roles
-            </h2>
-          </div>
-
-          <div className="flex flex-wrap gap-2 p-6">
-            {(userItem.roles || []).map((userRole) => (
-              <span
-                key={userRole}
-                className={`rounded-full px-3 py-1 text-xs font-bold ${getRoleClass(
-                  userRole,
-                )}`}
-              >
-                {userRole}
-              </span>
-            ))}
           </div>
         </section>
       </div>

@@ -1,69 +1,54 @@
 import { useEffect, useState } from "react";
 import { NavLink, Link } from "react-router-dom";
 import {
-  addAuthListener,
-  getUserRoles,
+  getCurrentUser,
+  getUserRole,
   isAuthenticated,
-  removeAccessToken,
+  logout,
 } from "../utils/auth";
-import keycloak from "../keycloak";
 
 function Navbar() {
-  // Track whether the user is authenticated.
   const [authenticated, setAuthenticated] = useState(isAuthenticated());
+  const [role, setRole] = useState(getUserRole());
 
-  // Store the roles assigned to the current user.
-  const [roles, setRoles] = useState(getUserRoles());
-
-  // Control the mobile navigation menu.
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    // Update Navbar when authentication changes.
     const handleAuthChange = () => {
       setAuthenticated(isAuthenticated());
-      setRoles(getUserRoles());
+      setRole(getUserRole());
     };
 
-    // Listen for authentication changes.
-    const removeListener = addAuthListener(handleAuthChange);
+    window.addEventListener("storage", handleAuthChange);
 
-    // Remove listener when Navbar is unmounted.
-    return removeListener;
+    const interval = setInterval(() => {
+      setAuthenticated(isAuthenticated());
+      setRole(getUserRole());
+    }, 1000);
+
+    return () => {
+      window.removeEventListener("storage", handleAuthChange);
+      clearInterval(interval);
+    };
   }, []);
 
-  // Logout the current user from Keycloak.
-  const handleLogout = async () => {
+  const currentUser = getCurrentUser();
+
+  const handleLogout = () => {
     setMobileMenuOpen(false);
-
-    try {
-      // Clear the locally stored token first.
-      removeAccessToken();
-
-      // End the actual Keycloak browser session.
-      await keycloak.logout({
-        redirectUri: window.location.origin,
-      });
-    } catch (error) {
-      console.error("Keycloak logout failed:", error);
-
-      // Make sure the local authentication state
-      // is cleared even if the Keycloak request fails.
-      removeAccessToken();
-    }
+    logout();
   };
 
-  // Determine the user's primary role.
   const getPrimaryRole = () => {
-    if (roles.includes("ADMIN")) {
+    if (role === "ADMIN") {
       return "ADMIN";
     }
 
-    if (roles.includes("INSTRUCTOR")) {
+    if (role === "INSTRUCTOR") {
       return "INSTRUCTOR";
     }
 
-    if (roles.includes("STUDENT")) {
+    if (role === "STUDENT") {
       return "STUDENT";
     }
 
@@ -72,7 +57,6 @@ function Navbar() {
 
   const primaryRole = getPrimaryRole();
 
-  // Desktop navigation link styling.
   const navLinkClass = ({ isActive }) =>
     `rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
       isActive
@@ -118,15 +102,11 @@ function Navbar() {
             Courses
           </NavLink>
 
-          {/* Student navigation */}
-
           {authenticated && primaryRole === "STUDENT" && (
             <NavLink to="/my-learning" className={navLinkClass}>
               My Learning
             </NavLink>
           )}
-
-          {/* Instructor navigation */}
 
           {authenticated && primaryRole === "INSTRUCTOR" && (
             <NavLink to="/instructor" className={navLinkClass}>
@@ -134,15 +114,11 @@ function Navbar() {
             </NavLink>
           )}
 
-          {/* Admin navigation */}
-
           {authenticated && primaryRole === "ADMIN" && (
             <NavLink to="/admin" className={navLinkClass}>
               Admin
             </NavLink>
           )}
-
-          {/* Profile */}
 
           {authenticated && (
             <NavLink to="/profile" className={navLinkClass}>
@@ -158,8 +134,6 @@ function Navbar() {
         <div className="hidden items-center gap-3 md:flex">
           {authenticated ? (
             <>
-              {/* Current role */}
-
               {primaryRole && (
                 <div className="flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-green-500 shadow-sm" />
@@ -169,8 +143,6 @@ function Navbar() {
                   </span>
                 </div>
               )}
-
-              {/* Logout */}
 
               <button
                 type="button"
@@ -182,16 +154,12 @@ function Navbar() {
             </>
           ) : (
             <>
-              {/* Login */}
-
               <Link
                 to="/login"
                 className="rounded-lg px-5 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-100 hover:text-primary"
               >
                 Login
               </Link>
-
-              {/* Sign Up */}
 
               <Link
                 to="/register"
@@ -224,8 +192,6 @@ function Navbar() {
       {mobileMenuOpen && (
         <div className="border-t border-gray-200 bg-white px-5 py-5 shadow-lg md:hidden">
           <div className="flex flex-col gap-2">
-            {/* Home */}
-
             <NavLink
               to="/"
               onClick={() => setMobileMenuOpen(false)}
@@ -240,8 +206,6 @@ function Navbar() {
               Home
             </NavLink>
 
-            {/* Courses */}
-
             <NavLink
               to="/courses"
               onClick={() => setMobileMenuOpen(false)}
@@ -255,8 +219,6 @@ function Navbar() {
             >
               Courses
             </NavLink>
-
-            {/* Student */}
 
             {authenticated && primaryRole === "STUDENT" && (
               <NavLink
@@ -274,8 +236,6 @@ function Navbar() {
               </NavLink>
             )}
 
-            {/* Instructor */}
-
             {authenticated && primaryRole === "INSTRUCTOR" && (
               <NavLink
                 to="/instructor"
@@ -292,8 +252,6 @@ function Navbar() {
               </NavLink>
             )}
 
-            {/* Admin */}
-
             {authenticated && primaryRole === "ADMIN" && (
               <NavLink
                 to="/admin"
@@ -309,8 +267,6 @@ function Navbar() {
                 Admin
               </NavLink>
             )}
-
-            {/* Profile */}
 
             {authenticated && (
               <NavLink
@@ -329,8 +285,6 @@ function Navbar() {
             )}
 
             <div className="my-2 border-t border-gray-200" />
-
-            {/* Mobile authentication */}
 
             {authenticated ? (
               <div className="flex items-center justify-between pt-2">
