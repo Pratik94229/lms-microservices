@@ -2,14 +2,13 @@ package com.lms.quiz_service.controller;
 
 import com.lms.quiz_service.dto.AttemptResponse;
 import com.lms.quiz_service.exception.AttemptNotFoundException;
+import com.lms.quiz_service.security.JwtPrincipal;
 import com.lms.quiz_service.service.QuizAttemptService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -34,10 +33,10 @@ public class QuizAttemptController {
     @ResponseStatus(HttpStatus.CREATED)
     public AttemptResponse startAttempt(
             @PathVariable String quizId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        String studentId = jwt.getSubject();
+        String studentId = principal.userId();
 
         return quizAttemptService.startAttempt(
                 quizId,
@@ -55,14 +54,16 @@ public class QuizAttemptController {
      * for this quiz.
      */
     @GetMapping("/{quizId}/attempts/active")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<AttemptResponse> getActiveAttempt(
             @PathVariable String quizId,
-            Authentication authentication
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        String studentId = authentication.getName();
+        String studentId = principal.userId();
 
         try {
+
             AttemptResponse attempt =
                     quizAttemptService.getActiveAttempt(
                             quizId,
@@ -88,10 +89,10 @@ public class QuizAttemptController {
     @GetMapping("/attempts/my")
     @PreAuthorize("hasRole('STUDENT')")
     public List<AttemptResponse> getMyAttempts(
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        String studentId = jwt.getSubject();
+        String studentId = principal.userId();
 
         return quizAttemptService.getMyAttempts(
                 studentId

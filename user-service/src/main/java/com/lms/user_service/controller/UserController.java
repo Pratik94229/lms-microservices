@@ -4,7 +4,6 @@ import com.lms.user_service.dto.AdminUserResponse;
 import com.lms.user_service.dto.ChangeUserRoleRequest;
 import com.lms.user_service.dto.UserProfileUpdateRequest;
 import com.lms.user_service.model.User;
-import com.lms.user_service.service.KeycloakAdminService;
 import com.lms.user_service.service.UserService;
 import jakarta.validation.Valid;
 
@@ -12,7 +11,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,20 +21,16 @@ import java.util.Map;
 public class UserController {
 
     private final UserService userService;
-    private final KeycloakAdminService keycloakAdminService;
 
-    public UserController(
-            UserService userService,
-            KeycloakAdminService keycloakAdminService
-    ) {
+    public UserController(UserService userService) {
         this.userService = userService;
-        this.keycloakAdminService = keycloakAdminService;
     }
 
-//    @GetMapping("/test")
-//    public String test() {
-//        return "User Service is Working";
-//    }
+    /*
+     * =========================================================
+     * ROLE TEST ENDPOINTS
+     * =========================================================
+     */
 
     @GetMapping("/student")
     @PreAuthorize("hasRole('STUDENT')")
@@ -60,31 +54,15 @@ public class UserController {
      * =========================================================
      * CURRENT USER
      * =========================================================
+     *
+     * JWT subject = MongoDB User ID
      */
 
     @GetMapping("/me")
     public User getCurrentUser(
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal User currentUser
     ) {
-
-        String keycloakUserId =
-                jwt.getSubject();
-
-        String username =
-                jwt.getClaimAsString(
-                        "preferred_username"
-                );
-
-        String email =
-                jwt.getClaimAsString(
-                        "email"
-                );
-
-        return userService.getOrCreateUser(
-                keycloakUserId,
-                username,
-                email
-        );
+        return userService.getUserById(currentUser.getId());
     }
 
     /*
@@ -95,15 +73,12 @@ public class UserController {
 
     @PutMapping("/me")
     public User updateCurrentUser(
-            @AuthenticationPrincipal Jwt jwt,
+            @AuthenticationPrincipal User currentUser,
             @Valid @RequestBody UserProfileUpdateRequest request
     ) {
 
-        String keycloakUserId =
-                jwt.getSubject();
-
         return userService.updateUserProfile(
-                keycloakUserId,
+                currentUser.getId(),
                 request.getFirstName(),
                 request.getLastName(),
                 request.getPhone()
@@ -112,7 +87,7 @@ public class UserController {
 
     /*
      * =========================================================
-     * ADMIN - GET ALL USERS WITH KEYCLOAK ROLES
+     * ADMIN - GET ALL USERS
      * =========================================================
      */
 
@@ -120,23 +95,13 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN')")
     public List<AdminUserResponse> getAllUsers() {
 
-        List<User> users =
-                userService.getAllUsers();
+        List<User> users = userService.getAllUsers();
 
         return users.stream()
-                .map(user -> {
-
-                    List<String> roles =
-                            keycloakAdminService
-                                    .getUserRealmRoles(
-                                            user.getKeycloakUserId()
-                                    );
-
-                    return new AdminUserResponse(
-                            user,
-                            roles
-                    );
-                })
+                .map(user -> new AdminUserResponse(
+                        user,
+                        List.of(user.getRole())
+                ))
                 .toList();
     }
 
@@ -146,29 +111,24 @@ public class UserController {
      * =========================================================
      */
 
-    @PutMapping("/{keycloakUserId}/role")
+    @PutMapping("/{userId}/role")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, String>> changeUserRole(
-            @PathVariable String keycloakUserId,
+            @PathVariable String userId,
             @Valid @RequestBody ChangeUserRoleRequest request
     ) {
 
-        keycloakAdminService.changeUserRole(
-                keycloakUserId,
+        User updatedUser = userService.changeUserRole(
+                userId,
                 request.getRole()
         );
 
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(Map.of(
-                        "message",
-                        "User role updated successfully",
-
-                        "keycloakUserId",
-                        keycloakUserId,
-
-                        "role",
-                        request.getRole()
+                        "message", "User role updated successfully",
+                        "userId", updatedUser.getId(),
+                        "role", updatedUser.getRole()
                 ));
     }
 
@@ -176,49 +136,40 @@ public class UserController {
      * =========================================================
      * ADMIN - DELETE USER
      * =========================================================
-     *
-     * DELETE /api/users/{keycloakUserId}
-     *
-     * Only an ADMIN can delete a user.
      */
-    @DeleteMapping("/{keycloakUserId}")
+
+    @DeleteMapping("/{userId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, String>> deleteUser(
-            @PathVariable String keycloakUserId,
-            @AuthenticationPrincipal Jwt jwt
+            @PathVariable String userId,
+            @AuthenticationPrincipal User currentAdmin
     ) {
 
-        /*
-         * The subject of the JWT is the Keycloak user ID
-         * of the administrator making this request.
-         */
-        String requestingAdminId =
-                jwt.getSubject();
-
         userService.deleteUser(
-                keycloakUserId,
-                requestingAdminId
+                userId,
+                currentAdmin.getId()
         );
 
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(Map.of(
-                        "message",
-                        "User deleted successfully",
-
-                        "keycloakUserId",
-                        keycloakUserId
+                        "message", "User deleted successfully",
+                        "userId", userId
                 ));
     }
-    
-    @GetMapping("/{keycloakUserId}")
-    public User getUserByKeycloakUserId(
-            @PathVariable String keycloakUserId
+
+    /*
+     * =========================================================
+     * GET USER BY ID
+     * =========================================================
+     *
+     * Used by other LMS services.
+     */
+
+    @GetMapping("/{userId}")
+    public User getUserById(
+            @PathVariable String userId
     ) {
-        return userService
-                .getUserByKeycloakUserId(keycloakUserId);
+        return userService.getUserById(userId);
     }
-    
-    
-    
 }

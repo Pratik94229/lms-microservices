@@ -26,7 +26,7 @@ public class Enrollment {
     private String id;
 
     /*
-     * Keycloak user ID of the student.
+     * User ID of the student.
      */
     private String studentId;
 

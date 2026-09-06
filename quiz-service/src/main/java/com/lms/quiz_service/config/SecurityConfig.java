@@ -1,25 +1,26 @@
 package com.lms.quiz_service.config;
 
+import com.lms.quiz_service.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.convert.converter.Converter;
-import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter
+    ) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(
@@ -27,113 +28,44 @@ public class SecurityConfig {
     ) throws Exception {
 
         http
-                // This is a stateless REST API,
-                // so CSRF protection is not required.
                 .csrf(csrf -> csrf.disable())
 
-                // Configure which endpoints require authentication.
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
+                        )
+                )
+
                 .authorizeHttpRequests(auth -> auth
 
-                        // These endpoints can be accessed
-                        // without a JWT.
+                        /*
+                         * Public quiz read endpoints.
+                         *
+                         * Actual access restrictions for quiz
+                         * operations are handled with @PreAuthorize
+                         * in the controllers.
+                         */
                         .requestMatchers(
-                                "/actuator/health",
-                                "/actuator/mappings"
+                                HttpMethod.GET,
+                                "/api/quizzes/*"
                         ).permitAll()
 
-                        // Every other endpoint requires
-                        // a valid Keycloak JWT.
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/quizzes"
+                        ).permitAll()
+
+                        /*
+                         * Everything else requires authentication.
+                         */
                         .anyRequest().authenticated()
                 )
 
-                // Configure JWT authentication.
-                .oauth2ResourceServer(oauth2 ->
-                        oauth2.jwt(jwt ->
-                                jwt.jwtAuthenticationConverter(
-                                        keycloakJwtAuthenticationConverter()
-                                )
-                        )
+                .addFilterBefore(
+                        jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
                 );
 
         return http.build();
-    }
-
-
-    /*
-     * Converts Keycloak roles into Spring Security authorities.
-     *
-     * Keycloak JWT:
-     *
-     * "realm_access": {
-     *     "roles": [
-     *         "INSTRUCTOR",
-     *         "STUDENT"
-     *     ]
-     * }
-     *
-     * Spring Security needs:
-     *
-     * ROLE_INSTRUCTOR
-     * ROLE_STUDENT
-     *
-     * This allows us to use:
-     *
-     * @PreAuthorize("hasRole('INSTRUCTOR')")
-     */
-    @Bean
-    public Converter<Jwt, AbstractAuthenticationToken>
-    keycloakJwtAuthenticationConverter() {
-
-        JwtAuthenticationConverter converter =
-                new JwtAuthenticationConverter();
-
-        converter.setJwtGrantedAuthoritiesConverter(
-                jwt -> {
-
-                    Collection<GrantedAuthority> authorities =
-                            new ArrayList<>();
-
-                    /*
-                     * Get the realm_access object from
-                     * the Keycloak JWT.
-                     */
-                    Map<String, Object> realmAccess =
-                            jwt.getClaimAsMap("realm_access");
-
-                    if (realmAccess != null) {
-
-                        /*
-                         * Get the roles array.
-                         */
-                        Object rolesObject =
-                                realmAccess.get("roles");
-
-                        if (rolesObject instanceof List<?> roles) {
-
-                            /*
-                             * Convert each Keycloak role:
-                             *
-                             * INSTRUCTOR
-                             *
-                             * into:
-                             *
-                             * ROLE_INSTRUCTOR
-                             */
-                            for (Object role : roles) {
-
-                                authorities.add(
-                                        new SimpleGrantedAuthority(
-                                                "ROLE_" + role
-                                        )
-                                );
-                            }
-                        }
-                    }
-
-                    return authorities;
-                }
-        );
-
-        return converter;
     }
 }

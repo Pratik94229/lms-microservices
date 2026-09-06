@@ -12,16 +12,13 @@ spring:
     mongodb:
       uri: ${MONGODB_COURSE_URI}
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://keycloak:8181/realms/lms/protocol/openid-connect/certs}
-
   servlet:
     multipart:
       max-file-size: 500MB
       max-request-size: 500MB
+
+jwt:
+  secret: ${JWT_SECRET}
 
 eureka:
   client:

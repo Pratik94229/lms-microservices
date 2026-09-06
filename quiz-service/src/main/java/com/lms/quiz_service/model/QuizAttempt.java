@@ -28,7 +28,7 @@ public class QuizAttempt {
      * Student who started the attempt.
      *
      * This is the subject (sub) from
-     * the Keycloak JWT.
+     * the authenticated JWT.
      */
     private String studentId;
 

@@ -12,11 +12,8 @@ spring:
     mongodb:
       uri: ${MONGODB_QUIZ_URI}
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://keycloak:8181/realms/lms/protocol/openid-connect/certs}
+jwt:
+  secret: ${JWT_SECRET}
 
 eureka:
   client:

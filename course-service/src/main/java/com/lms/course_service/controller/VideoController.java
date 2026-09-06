@@ -1,6 +1,6 @@
 package com.lms.course_service.controller;
 
-import com.cloudinary.utils.ObjectUtils;
+
 import com.lms.course_service.service.CloudinaryService;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;

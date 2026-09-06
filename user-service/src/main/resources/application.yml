@@ -12,20 +12,11 @@ spring:
     mongodb:
       uri: ${MONGODB_URI}
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://keycloak:8181/realms/lms/protocol/openid-connect/certs}
+jwt:
+  secret: ${JWT_SECRET}
+  expiration-ms: ${JWT_EXPIRATION_MS:7200000}
 
 eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
-
-keycloak:
-  admin:
-    server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8181}
-    realm: lms
-    client-id: lms-user-service
-    client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET}

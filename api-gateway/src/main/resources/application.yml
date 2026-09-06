@@ -29,6 +29,7 @@ spring:
               '[/**]':
                 allowedOrigins:
                   - "http://localhost:5173"
+                  - "https://lms-microservices-zeta.vercel.app"
                 allowedMethods:
                   - GET
                   - POST

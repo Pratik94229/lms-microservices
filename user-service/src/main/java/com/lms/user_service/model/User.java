@@ -1,5 +1,6 @@
 package com.lms.user_service.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -15,17 +16,16 @@ public class User {
     @Id
     private String id;
 
-    private String keycloakUserId;
-
     private String username;
-
     private String email;
 
+    @JsonIgnore
+    private String passwordHash;
+
+    private String role;
+
     private String firstName;
-
     private String lastName;
-
     private String phone;
-
     private String profileImage;
 }

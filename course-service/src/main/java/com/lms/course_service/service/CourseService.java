@@ -14,9 +14,7 @@ import com.lms.course_service.repository.EnrollmentRepository;
 import com.lms.course_service.repository.LessonProgressRepository;
 import com.lms.course_service.repository.LessonRepository;
 import com.lms.course_service.repository.SectionRepository;
-
 import lombok.AllArgsConstructor;
-
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -329,7 +327,7 @@ public class CourseService {
                      * Get student details from User Service.
                      *
                      * Some old/stale enrollments may reference a
-                     * Keycloak user that no longer exists in the
+                     * user that no longer exists in the
                      * User Service database.
                      *
                      * We don't want one missing user to break the
@@ -342,7 +340,7 @@ public class CourseService {
 
                         student =
                                 userServiceClient
-                                        .getUserByKeycloakUserId(
+                                        .getUserByUserId(
                                                 enrollment.getStudentId()
                                         );
 

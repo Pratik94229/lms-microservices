@@ -2,10 +2,12 @@ package com.lms.user_service.service;
 
 import com.lms.user_service.model.User;
 import com.lms.user_service.repository.UserRepository;
+import com.lms.user_service.security.JwtService;
 
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -13,37 +15,143 @@ import org.springframework.web.server.ResponseStatusException;
 public class UserService {
 
     private final UserRepository userRepository;
-    private final KeycloakAdminService keycloakAdminService;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     public UserService(
             UserRepository userRepository,
-            KeycloakAdminService keycloakAdminService
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService
     ) {
         this.userRepository = userRepository;
-        this.keycloakAdminService = keycloakAdminService;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
     }
 
     /*
      * =========================================================
-     * GET OR CREATE CURRENT USER
+     * REGISTER USER
+     * =========================================================
+     */
+
+    public User registerUser(
+            String username,
+            String email,
+            String password
+    ) {
+
+        if (userRepository.existsByUsername(username)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Username already exists"
+            );
+        }
+
+        if (userRepository.existsByEmail(email)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Email already exists"
+            );
+        }
+
+        User user = new User();
+
+        user.setUsername(username);
+        user.setEmail(email);
+
+        /*
+         * NEVER store the plain password.
+         */
+        user.setPasswordHash(
+                passwordEncoder.encode(password)
+        );
+
+        /*
+         * Normal registration always creates
+         * a STUDENT account.
+         */
+        user.setRole("STUDENT");
+
+        return userRepository.save(user);
+    }
+
+    /*
+     * =========================================================
+     * LOGIN
+     * =========================================================
+     */
+
+    public String login(
+            String username,
+            String password
+    ) {
+
+        User user =
+                userRepository.findByUsername(username)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.UNAUTHORIZED,
+                                        "Invalid username or password"
+                                )
+                        );
+
+        boolean passwordMatches =
+                passwordEncoder.matches(
+                        password,
+                        user.getPasswordHash()
+                );
+
+        if (!passwordMatches) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Invalid username or password"
+            );
+        }
+
+        return jwtService.generateToken(user);
+    }
+
+    /*
+     * =========================================================
+     * GET USER BY USERNAME
+     * =========================================================
+     */
+
+    public User getUserByUsername(String username) {
+
+        return userRepository
+                .findByUsername(username)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "User not found"
+                        )
+                );
+    }
+
+    /*
+     * =========================================================
+     * GET CURRENT USER
      * =========================================================
      */
 
     public User getOrCreateUser(
-            String keycloakUserId,
+            String userId,
             String username,
             String email
     ) {
 
         return userRepository
-                .findByKeycloakUserId(keycloakUserId)
+                .findById(userId)
                 .orElseGet(() -> {
 
                     User user = new User();
 
-                    user.setKeycloakUserId(keycloakUserId);
+                    user.setId(userId);
                     user.setUsername(username);
                     user.setEmail(email);
+                    user.setRole("STUDENT");
 
                     return userRepository.save(user);
                 });
@@ -56,19 +164,20 @@ public class UserService {
      */
 
     public User updateUserProfile(
-            String keycloakUserId,
+            String userId,
             String firstName,
             String lastName,
             String phone
     ) {
 
-        User user = userRepository
-                .findByKeycloakUserId(keycloakUserId)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "User profile not found"
-                        )
-                );
+        User user =
+                userRepository.findById(userId)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "User profile not found"
+                                )
+                        );
 
         user.setFirstName(firstName);
         user.setLastName(lastName);
@@ -90,6 +199,31 @@ public class UserService {
 
     /*
      * =========================================================
+     * ADMIN - CHANGE USER ROLE
+     * =========================================================
+     */
+
+    public User changeUserRole(
+            String userId,
+            String newRole
+    ) {
+
+        User user =
+                userRepository.findById(userId)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "User not found"
+                                )
+                        );
+
+        user.setRole(newRole);
+
+        return userRepository.save(user);
+    }
+
+    /*
+     * =========================================================
      * ADMIN - DELETE USER
      * =========================================================
      *
@@ -98,33 +232,27 @@ public class UserService {
      * 1. Admin cannot delete their own account.
      *
      * 2. The last remaining ADMIN cannot be deleted.
-     *
-     * 3. Keycloak account is deleted before MongoDB profile.
      */
+
     public void deleteUser(
-            String keycloakUserId,
+            String userId,
             String requestingAdminId
     ) {
 
-        /*
-         * Find the LMS profile that is going to be deleted.
-         */
-        User user = userRepository
-                .findByKeycloakUserId(keycloakUserId)
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "User profile not found"
-                        )
-                );
+        User user =
+                userRepository.findById(userId)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "User profile not found"
+                                )
+                        );
 
         /*
-         * =====================================================
-         * SAFETY CHECK 1 - SELF DELETE
-         * =====================================================
+         * Safety check 1:
+         * Admin cannot delete themselves.
          */
-
-        if (keycloakUserId.equals(requestingAdminId)) {
+        if (userId.equals(requestingAdminId)) {
 
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
@@ -133,43 +261,21 @@ public class UserService {
         }
 
         /*
-         * =====================================================
-         * SAFETY CHECK 2 - LAST ADMIN
-         * =====================================================
-         *
-         * We only need to perform this check when the
-         * target user currently has the ADMIN role.
+         * Safety check 2:
+         * Never delete the last administrator.
          */
-        List<String> targetRoles =
-                keycloakAdminService.getUserRealmRoles(
-                        keycloakUserId
-                );
+        if ("ADMIN".equals(user.getRole())) {
 
-        boolean targetIsAdmin =
-                targetRoles.contains("ADMIN");
+            long adminCount =
+                    userRepository.findAll()
+                            .stream()
+                            .filter(existingUser ->
+                                    "ADMIN".equals(
+                                            existingUser.getRole()
+                                    )
+                            )
+                            .count();
 
-        if (targetIsAdmin) {
-
-            List<User> allUsers =
-                    userRepository.findAll();
-
-            long adminCount = 0;
-
-            for (User existingUser : allUsers) {
-
-                List<String> roles =
-                        keycloakAdminService.getUserRealmRoles(
-                                existingUser.getKeycloakUserId()
-                        );
-
-                if (roles.contains("ADMIN")) {
-                    adminCount++;
-                }
-            }
-
-            /*
-             * Never allow the last administrator to be deleted.
-             */
             if (adminCount <= 1) {
 
                 throw new ResponseStatusException(
@@ -179,35 +285,24 @@ public class UserService {
             }
         }
 
-        /*
-         * =====================================================
-         * DELETE FROM KEYCLOAK
-         * =====================================================
-         */
-
-        keycloakAdminService.deleteUser(
-                keycloakUserId
-        );
-
-        /*
-         * =====================================================
-         * DELETE FROM MONGODB
-         * =====================================================
-         */
-
         userRepository.delete(user);
     }
 
-    public User getUserByKeycloakUserId(String keycloakUserId) {
+    /*
+     * =========================================================
+     * GET USER BY ID
+     * =========================================================
+     */
+
+    public User getUserById(String userId) {
 
         return userRepository
-                .findByKeycloakUserId(keycloakUserId)
+                .findById(userId)
                 .orElseThrow(() ->
-                        new RuntimeException(
-                                "User not found: " + keycloakUserId
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "User not found: " + userId
                         )
                 );
     }
-    
-    
 }

@@ -1,16 +1,15 @@
 package com.lms.course_service.controller;
 
-
 import com.lms.course_service.dto.LessonCreateRequest;
 import com.lms.course_service.dto.LessonUpdateRequest;
 import com.lms.course_service.model.Lesson;
+import com.lms.course_service.security.JwtPrincipal;
 import com.lms.course_service.service.LessonService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -35,14 +34,11 @@ public class LessonController {
     public Lesson createLesson(
             @PathVariable String sectionId,
             @Valid @RequestBody LessonCreateRequest request,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        // Get the authenticated instructor's
-        // Keycloak user ID from the JWT.
-        String instructorId = jwt.getSubject();
+        String instructorId = principal.userId();
 
-        // Create the lesson through the service layer.
         return lessonService.createLesson(
                 sectionId,
                 instructorId,
@@ -54,7 +50,6 @@ public class LessonController {
                 request.getOrderIndex()
         );
     }
-
 
     /*
      * Get all lessons belonging to a section.
@@ -83,11 +78,10 @@ public class LessonController {
             @PathVariable String sectionId,
             @PathVariable String lessonId,
             @Valid @RequestBody LessonUpdateRequest request,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        // Get authenticated instructor ID from JWT.
-        String instructorId = jwt.getSubject();
+        String instructorId = principal.userId();
 
         return lessonService.updateLesson(
                 lessonId,
@@ -113,21 +107,17 @@ public class LessonController {
     public ResponseEntity<Void> deleteLesson(
             @PathVariable String sectionId,
             @PathVariable String lessonId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        // Get authenticated instructor ID from JWT.
-        String instructorId = jwt.getSubject();
+        String instructorId = principal.userId();
 
-        // Delete the lesson.
         lessonService.deleteLesson(
                 lessonId,
                 sectionId,
                 instructorId
         );
 
-        // HTTP 204 means deletion was successful
-        // and there is no response body.
         return ResponseEntity.noContent().build();
     }
 
@@ -143,10 +133,10 @@ public class LessonController {
     @PreAuthorize("hasRole('STUDENT')")
     public List<Lesson> getLessonsForStudent(
             @PathVariable String sectionId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        String studentId = jwt.getSubject();
+        String studentId = principal.userId();
 
         return lessonService.getLessonsForStudent(
                 sectionId,

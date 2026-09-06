@@ -5,12 +5,12 @@ import com.lms.course_service.dto.CourseCreateRequest;
 import com.lms.course_service.dto.CourseUpdateRequest;
 import com.lms.course_service.dto.StudentCourseAnalyticsResponse;
 import com.lms.course_service.model.Course;
+import com.lms.course_service.security.JwtPrincipal;
 import com.lms.course_service.service.CourseService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,17 +29,12 @@ public class CourseController {
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public Course createCourse(
             @Valid @RequestBody CourseCreateRequest request,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        String instructorId = jwt.getSubject();
-
-        String instructorUsername =
-                jwt.getClaimAsString("preferred_username");
-
         return courseService.createCourse(
-                instructorId,
-                instructorUsername,
+                principal.userId(),
+                principal.username(),
                 request.getTitle(),
                 request.getDescription(),
                 request.getPrice()
@@ -49,17 +44,16 @@ public class CourseController {
     @GetMapping("/my")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public List<Course> getMyCourses(
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        String instructorId = jwt.getSubject();
-
-        return courseService.getCoursesByInstructor(instructorId);
+        return courseService.getCoursesByInstructor(
+                principal.userId()
+        );
     }
 
     @GetMapping
     public List<Course> getPublishedCourses() {
-
         return courseService.getPublishedCourses();
     }
 
@@ -67,27 +61,23 @@ public class CourseController {
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public Course publishCourse(
             @PathVariable String courseId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
-
-        String instructorId = jwt.getSubject();
 
         return courseService.publishCourse(
                 courseId,
-                instructorId
+                principal.userId()
         );
     }
 
     @GetMapping("/{courseId}")
     public Course getCourseById(
             @PathVariable String courseId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        // JWT is null when an anonymous user requests
-        // a public course.
-        String requesterId = jwt != null
-                ? jwt.getSubject()
+        String requesterId = principal != null
+                ? principal.userId()
                 : null;
 
         return courseService.getCourseById(
@@ -96,28 +86,16 @@ public class CourseController {
         );
     }
 
-    /*
-     * =========================================================
-     * COURSE ANALYTICS
-     * =========================================================
-     *
-     * Returns enrollment and completion statistics
-     * for the authenticated instructor's course.
-     */
     @GetMapping("/{courseId}/analytics")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public CourseAnalyticsResponse getCourseAnalytics(
             @PathVariable String courseId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
-
-        // Get the authenticated instructor's
-        // Keycloak user ID from the JWT.
-        String instructorId = jwt.getSubject();
 
         return courseService.getCourseAnalytics(
                 courseId,
-                instructorId
+                principal.userId()
         );
     }
 
@@ -126,17 +104,12 @@ public class CourseController {
     public Course updateCourse(
             @PathVariable String courseId,
             @Valid @RequestBody CourseUpdateRequest request,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        // Get the authenticated instructor's
-        // Keycloak user ID from the JWT.
-        String instructorId = jwt.getSubject();
-
-        // Pass the authenticated user's ID to the service.
         return courseService.updateCourse(
                 courseId,
-                instructorId,
+                principal.userId(),
                 request.getTitle(),
                 request.getDescription(),
                 request.getPrice()
@@ -147,34 +120,27 @@ public class CourseController {
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public ResponseEntity<Void> deleteCourse(
             @PathVariable String courseId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        // Get the authenticated instructor's Keycloak ID.
-        String instructorId = jwt.getSubject();
-
-        // Delete the course after verifying ownership.
         courseService.deleteCourse(
                 courseId,
-                instructorId
+                principal.userId()
         );
 
-        // 204 means:
-        // Request succeeded, but there is no response body.
         return ResponseEntity.noContent().build();
     }
-    
+
     @GetMapping("/{courseId}/analytics/students")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public List<StudentCourseAnalyticsResponse> getStudentCourseAnalytics(
             @PathVariable String courseId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
-        String instructorId = jwt.getSubject();
 
         return courseService.getStudentCourseAnalytics(
                 courseId,
-                instructorId
+                principal.userId()
         );
     }
 }

@@ -1,10 +1,10 @@
 package com.lms.course_service.config;
 
+import com.lms.course_service.security.JwtPrincipal;
 import feign.RequestInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 public class FeignClientConfig {
 
@@ -18,12 +18,9 @@ public class FeignClientConfig {
                             .getContext()
                             .getAuthentication();
 
-            if (authentication instanceof JwtAuthenticationToken jwtAuthentication) {
-
-                String token =
-                        jwtAuthentication
-                                .getToken()
-                                .getTokenValue();
+            if (authentication != null
+                    && authentication.getPrincipal() instanceof JwtPrincipal
+                    && authentication.getCredentials() instanceof String token) {
 
                 requestTemplate.header(
                         "Authorization",

@@ -1,5 +1,6 @@
 package com.lms.course_service.config;
 
+import com.lms.course_service.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -7,10 +8,19 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter
+    ) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(
@@ -18,10 +28,8 @@ public class SecurityConfig {
     ) throws Exception {
 
         http
-                // REST API does not use browser sessions.
                 .csrf(csrf -> csrf.disable())
 
-                // JWT authentication is stateless.
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
                                 SessionCreationPolicy.STATELESS
@@ -30,41 +38,32 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
-                        // Anyone can browse published courses.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/courses"
                         ).permitAll()
 
-                        // Anyone can view a course by ID.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/courses/*"
                         ).permitAll()
 
-                        // Anyone can view sections of a course.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/courses/*/sections"
                         ).permitAll()
 
-                        // Anyone can view lessons in a section.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/sections/*/lessons"
                         ).permitAll()
 
-                        // Everything else requires authentication.
                         .anyRequest().authenticated()
                 )
 
-                // Validate JWT using Keycloak.
-                .oauth2ResourceServer(oauth2 ->
-                        oauth2.jwt(jwt ->
-                                jwt.jwtAuthenticationConverter(
-                                        new KeycloakJwtAuthenticationConverter()
-                                )
-                        )
+                .addFilterBefore(
+                        jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
                 );
 
         return http.build();

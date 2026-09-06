@@ -2,12 +2,12 @@ package com.lms.course_service.controller;
 
 import com.lms.course_service.exception.CourseEnrollmentAccessDeniedException;
 import com.lms.course_service.model.Enrollment;
+import com.lms.course_service.security.JwtPrincipal;
 import com.lms.course_service.service.EnrollmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,9 +24,9 @@ public class EnrollmentController {
     @ResponseStatus(HttpStatus.CREATED)
     public Enrollment enrollInCourse(
             @PathVariable String courseId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
-        String studentId = jwt.getSubject();
+        String studentId = principal.userId();
 
         return enrollmentService.enrollStudent(
                 courseId,
@@ -37,9 +37,9 @@ public class EnrollmentController {
     @GetMapping("/my")
     @PreAuthorize("hasRole('STUDENT')")
     public List<Enrollment> getMyEnrollments(
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
-        String studentId = jwt.getSubject();
+        String studentId = principal.userId();
 
         return enrollmentService.getMyEnrollments(
                 studentId
@@ -62,9 +62,9 @@ public class EnrollmentController {
     @ResponseStatus(HttpStatus.OK)
     public void verifyStudentEnrollment(
             @PathVariable String courseId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
-        String studentId = jwt.getSubject();
+        String studentId = principal.userId();
 
         boolean enrolled =
                 enrollmentService.isStudentEnrolled(

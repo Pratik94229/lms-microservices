@@ -4,6 +4,7 @@ import com.lms.quiz_service.dto.AnswerSubmitRequest;
 import com.lms.quiz_service.dto.AttemptAnswerResponse;
 import com.lms.quiz_service.dto.AttemptResponse;
 import com.lms.quiz_service.dto.AttemptResultQuestionResponse;
+import com.lms.quiz_service.security.JwtPrincipal;
 import com.lms.quiz_service.service.QuizAttemptAnswerService;
 import com.lms.quiz_service.service.QuizAttemptService;
 import jakarta.validation.Valid;
@@ -11,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -37,10 +37,10 @@ public class QuizAttemptAnswerController {
     public ResponseEntity<Void> submitAnswer(
             @PathVariable String attemptId,
             @Valid @RequestBody AnswerSubmitRequest request,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        String studentId = jwt.getSubject();
+        String studentId = principal.userId();
 
         quizAttemptAnswerService.submitAnswer(
                 attemptId,
@@ -66,10 +66,10 @@ public class QuizAttemptAnswerController {
     @PreAuthorize("hasRole('STUDENT')")
     public List<AttemptAnswerResponse> getAttemptAnswers(
             @PathVariable String attemptId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        String studentId = jwt.getSubject();
+        String studentId = principal.userId();
 
         return quizAttemptAnswerService.getAttemptAnswers(
                 attemptId,
@@ -95,10 +95,10 @@ public class QuizAttemptAnswerController {
     @PreAuthorize("hasRole('STUDENT')")
     public List<AttemptResultQuestionResponse> getAttemptResult(
             @PathVariable String attemptId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        String studentId = jwt.getSubject();
+        String studentId = principal.userId();
 
         return quizAttemptAnswerService.getAttemptResult(
                 attemptId,
@@ -118,10 +118,10 @@ public class QuizAttemptAnswerController {
     @PreAuthorize("hasRole('STUDENT')")
     public AttemptResponse submitAttempt(
             @PathVariable String attemptId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        String studentId = jwt.getSubject();
+        String studentId = principal.userId();
 
         return quizAttemptService.submitAttempt(
                 attemptId,

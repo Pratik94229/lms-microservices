@@ -1,11 +1,11 @@
 package com.lms.course_service.controller;
 
 import com.lms.course_service.model.Section;
+import com.lms.course_service.security.JwtPrincipal;
 import com.lms.course_service.service.SectionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -29,7 +29,6 @@ public class SectionLookupController {
         return sectionService.getSectionById(sectionId);
     }
 
-
     /*
      * Verify that the authenticated instructor owns
      * the course containing this section.
@@ -40,10 +39,10 @@ public class SectionLookupController {
     @GetMapping("/{sectionId}/access")
     public ResponseEntity<Void> verifySectionOwnership(
             @PathVariable String sectionId,
-            @AuthenticationPrincipal Jwt jwt
+            @AuthenticationPrincipal JwtPrincipal principal
     ) {
 
-        String instructorId = jwt.getSubject();
+        String instructorId = principal.userId();
 
         sectionService.verifySectionOwnership(
                 sectionId,
