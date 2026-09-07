@@ -110,7 +110,7 @@ public class PayPalService {
                         "value",
                         String.format(
                                 "%.2f",
-                                amount/90
+                                amount / 90
                         )
                 )
         );
@@ -128,6 +128,19 @@ public class PayPalService {
                 List.of(purchaseUnit)
         );
 
+        /*
+         * PayPal redirects the student to the frontend after
+         * successful payment.
+         *
+         * Local:
+         * http://localhost:5173/payment/success
+         *
+         * Production:
+         * https://lms-microservices-zeta.vercel.app/payment/success
+         *
+         * The actual frontend URL is controlled by the
+         * FRONTEND_URL environment variable through PayPalConfig.
+         */
         requestBody.put(
                 "payment_source",
                 Map.of(
@@ -138,9 +151,11 @@ public class PayPalService {
                                         "user_action",
                                         "PAY_NOW",
                                         "return_url",
-                                        "http://localhost:5173/payment/success",
+                                        payPalConfig.getFrontendUrl()
+                                                + "/payment/success",
                                         "cancel_url",
-                                        "http://localhost:5173/payment/cancel"
+                                        payPalConfig.getFrontendUrl()
+                                                + "/payment/cancel"
                                 )
                         )
                 )
@@ -346,8 +361,7 @@ public class PayPalService {
     // =========================================================
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object>
-    parseCompletedOrderResponse(
+    private Map<String, Object> parseCompletedOrderResponse(
             String response
     ) {
 
@@ -491,8 +505,7 @@ public class PayPalService {
     // =========================================================
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object>
-    parseOrderResponse(
+    private Map<String, Object> parseOrderResponse(
             String response
     ) {
 
@@ -580,8 +593,7 @@ public class PayPalService {
     // =========================================================
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object>
-    parseCaptureResponse(
+    private Map<String, Object> parseCaptureResponse(
             String response
     ) {
 
