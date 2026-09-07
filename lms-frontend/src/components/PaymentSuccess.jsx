@@ -15,49 +15,43 @@ function PaymentSuccess() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const [status, setStatus] = useState("processing");
-  const [message, setMessage] = useState("Confirming your payment...");
+  const orderId = searchParams.get("token");
+
+  const [status, setStatus] = useState(orderId ? "processing" : "error");
+
+  const [message, setMessage] = useState(
+    orderId ? "Confirming your payment..." : "PayPal order ID was not found.",
+  );
 
   useEffect(() => {
     const orderId = searchParams.get("token");
 
     if (!orderId) {
-      setStatus("error");
-      setMessage("PayPal order ID was not found.");
-      return;
-    }
-
-    /*
-     * If this exact PayPal order was already successfully
-     * captured in this browser session, don't call the
-     * backend again.
-     */
-    const completedKey = `paypal-payment-completed-${orderId}`;
-
-    if (sessionStorage.getItem(completedKey) === "true") {
-      setStatus("success");
-      setMessage("Payment successful! You are now enrolled in the course.");
       return;
     }
 
     const capturePayment = async () => {
       try {
         setStatus("processing");
-        setMessage("Confirming your payment...");
+        setMessage("Confirming your payment and enrollment...");
 
         const response = await api.post("/payments/capture", {
           orderId,
         });
 
-        console.log("Payment captured successfully:", response.data);
+        console.log("Payment and enrollment confirmed:", response.data);
 
         /*
-         * Remember that this PayPal order has already
-         * been processed successfully.
+         * IMPORTANT:
+         *
+         * We only show success after the backend
+         * successfully processes the payment endpoint.
+         *
+         * We no longer use sessionStorage as proof
+         * of enrollment.
          */
-        sessionStorage.setItem(completedKey, "true");
-
         setStatus("success");
+
         setMessage("Payment successful! You are now enrolled in the course.");
       } catch (error) {
         console.error("Payment capture failed:", error);
@@ -69,38 +63,21 @@ function PaymentSuccess() {
             ? error.response.data
             : JSON.stringify(error.response?.data || "");
 
-        const alreadyCaptured =
-          errorMessage.toLowerCase().includes("already captured") ||
-          errorText.toLowerCase().includes("order_already_captured");
-
-        /*
-         * PayPal may report that the order was already
-         * captured. This should be treated as success,
-         * not as a payment failure.
-         */
-        if (alreadyCaptured) {
-          sessionStorage.setItem(completedKey, "true");
-
-          setStatus("success");
-          setMessage(
-            "Payment was already completed. Your course access has been confirmed.",
-          );
-
-          return;
-        }
+        console.error("Payment error response:", errorMessage || errorText);
 
         setStatus("error");
 
-        setMessage(errorMessage || "Payment could not be completed.");
+        setMessage(
+          errorMessage || "Payment could not be completed. Please try again.",
+        );
       }
     };
 
     /*
      * IMPORTANT:
      *
-     * If StrictMode causes this effect to run again,
-     * reuse the SAME Promise instead of sending another
-     * POST request.
+     * If React StrictMode causes this effect to run
+     * more than once, reuse the same Promise.
      */
     if (!captureRequests.has(orderId)) {
       const request = capturePayment();
@@ -112,7 +89,7 @@ function PaymentSuccess() {
 
     request.catch(() => {
       /*
-       * Allow a retry if the request actually failed.
+       * Allow another attempt if the request actually failed.
        */
       captureRequests.delete(orderId);
     });

@@ -118,6 +118,7 @@ public class PaymentService {
                                 )
                         );
 
+        // Make sure this payment belongs to the logged-in student
         if (!payment.getStudentId().equals(studentId)) {
             throw new CourseEnrollmentAccessDeniedException(
                     "You are not authorized to capture this payment"
@@ -125,17 +126,49 @@ public class PaymentService {
         }
 
         /*
-         * If this payment was already completed,
-         * return it without calling PayPal again.
+         * IMPORTANT:
+         *
+         * If PayPal payment was already completed, DO NOT
+         * call PayPal again.
+         *
+         * But we MUST still make sure that the student
+         * is enrolled.
          */
-        if (payment.getStatus()
-                == PaymentStatus.COMPLETED) {
+        if (payment.getStatus() == PaymentStatus.COMPLETED) {
+
+            try {
+
+                enrollmentService.enrollStudent(
+                        payment.getCourseId(),
+                        studentId
+                );
+
+            } catch (Exception ex) {
+
+                /*
+                 * The enrollment may already exist.
+                 *
+                 * If it does, that is fine.
+                 *
+                 * We verify actual enrollment below.
+                 */
+                if (!enrollmentService.isStudentEnrolled(
+                        payment.getCourseId(),
+                        studentId
+                )) {
+
+                    throw new IllegalStateException(
+                            "Payment was completed, but course enrollment could not be confirmed",
+                            ex
+                    );
+                }
+            }
 
             return payment;
         }
 
         /*
-         * Capture the PayPal order.
+         * First-time capture.
          */
         Map<String, Object> captureResponse =
                 payPalService.captureOrder(orderId);
@@ -171,12 +204,7 @@ public class PaymentService {
                 paymentRepository.save(payment);
 
         /*
-         * Payment succeeded.
-         *
          * Now create the LMS enrollment.
-         *
-         * The enrollment service also prevents
-         * duplicate enrollment.
          */
         try {
 
@@ -188,20 +216,22 @@ public class PaymentService {
         } catch (Exception ex) {
 
             /*
-             * Important:
+             * Payment has already been completed.
              *
-             * The PayPal payment is already completed.
-             * We therefore do NOT mark the payment FAILED.
-             *
-             * We propagate the error so that we can see
-             * the enrollment problem and fix it properly.
+             * Before reporting failure, check whether
+             * enrollment actually exists.
              */
-            throw new IllegalStateException(
-                    "Payment completed, but course enrollment failed",
-                    ex
-            );
+            if (!enrollmentService.isStudentEnrolled(
+                    payment.getCourseId(),
+                    studentId
+            )) {
+
+                throw new IllegalStateException(
+                        "Payment completed, but course enrollment failed",
+                        ex
+                );
+            }
         }
 
         return completedPayment;
     }
-}

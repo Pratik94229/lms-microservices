@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../api/axios";
 
@@ -109,6 +109,7 @@ function StudentQuiz() {
           if (!cancelled) {
             setError("Please login before taking this quiz.");
           }
+
           return;
         }
 
@@ -290,57 +291,60 @@ function StudentQuiz() {
    * SUBMIT QUIZ
    * =========================================================
    */
-  const submitQuiz = async (confirmSubmission = true) => {
-    if (!attempt?.id || submitting || submitted) {
-      return;
-    }
-
-    /*
-     * Manual submission confirmation.
-     */
-    if (confirmSubmission) {
-      const confirmed = window.confirm(
-        `You have answered ${answeredCount} of ${questions.length} questions.\n\nAre you sure you want to submit the quiz?`,
-      );
-
-      if (!confirmed) {
+  const submitQuiz = useCallback(
+    async (confirmSubmission = true) => {
+      if (!attempt?.id || submitting || submitted) {
         return;
       }
-    }
-
-    try {
-      setSubmitting(true);
-      setError("");
-
-      const response = await api.post(`/attempts/${attempt.id}/submit`);
 
       /*
-       * Store final result.
+       * Manual submission confirmation.
        */
-      setResult(response.data);
-      setAttempt(response.data);
-      setSubmitted(true);
-      setRemainingSeconds(0);
-    } catch (err) {
-      console.error("Failed to submit quiz:", err);
-
-      if (err.response?.status === 401) {
-        setError("Your login session is invalid or expired.");
-      } else if (err.response?.status === 403) {
-        setError("You do not have permission to submit this quiz.");
-      } else if (err.response?.status === 404) {
-        setError("Quiz attempt not found.");
-      } else {
-        setError(
-          err.response?.data?.message ||
-            err.response?.data?.error ||
-            "Unable to submit the quiz. Please try again.",
+      if (confirmSubmission) {
+        const confirmed = window.confirm(
+          `You have answered ${answeredCount} of ${questions.length} questions.\n\nAre you sure you want to submit the quiz?`,
         );
+
+        if (!confirmed) {
+          return;
+        }
       }
-    } finally {
-      setSubmitting(false);
-    }
-  };
+
+      try {
+        setSubmitting(true);
+        setError("");
+
+        const response = await api.post(`/attempts/${attempt.id}/submit`);
+
+        /*
+         * Store final result.
+         */
+        setResult(response.data);
+        setAttempt(response.data);
+        setSubmitted(true);
+        setRemainingSeconds(0);
+      } catch (err) {
+        console.error("Failed to submit quiz:", err);
+
+        if (err.response?.status === 401) {
+          setError("Your login session is invalid or expired.");
+        } else if (err.response?.status === 403) {
+          setError("You do not have permission to submit this quiz.");
+        } else if (err.response?.status === 404) {
+          setError("Quiz attempt not found.");
+        } else {
+          setError(
+            err.response?.data?.message ||
+              err.response?.data?.error ||
+              "Unable to submit the quiz. Please try again.",
+          );
+        }
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [attempt, submitting, submitted, answeredCount, questions.length],
+  );
 
   /*
    * =========================================================
@@ -353,14 +357,12 @@ function StudentQuiz() {
    *
    * IMPORTANT:
    *
-   * The backend LocalDateTime is treated as UTC.
+   * Date.now() is only called inside asynchronous callbacks.
    *
-   * This prevents the browser's India timezone from incorrectly
-   * making the quiz appear expired immediately.
+   * It is NOT called during React rendering.
    */
   useEffect(() => {
     if (!attempt?.id || !attempt?.startedAt || !quiz?.timeLimit || submitted) {
-      setRemainingSeconds(null);
       return undefined;
     }
 
@@ -370,105 +372,90 @@ function StudentQuiz() {
     const startedAt = parseBackendDateTime(attempt.startedAt);
 
     /*
-     * NEVER automatically submit if the timestamp is invalid.
+     * Invalid timestamp.
      *
-     * This is very important.
+     * Never automatically submit when timestamp is invalid.
      */
     if (!startedAt) {
-      console.error("Invalid quiz attempt startedAt:", attempt.startedAt);
+      const timeout = setTimeout(() => {
+        setError(
+          "Unable to calculate the quiz timer. Please refresh and try again.",
+        );
+      }, 0);
 
-      setRemainingSeconds(null);
-      setError(
-        "Unable to calculate the quiz timer. Please refresh and try again.",
-      );
-
-      return undefined;
+      return () => {
+        clearTimeout(timeout);
+      };
     }
 
     const timeLimitMinutes = Number(quiz.timeLimit);
 
     /*
-     * Invalid time limit should never trigger submission.
+     * Invalid time limit.
      */
     if (!Number.isFinite(timeLimitMinutes) || timeLimitMinutes <= 0) {
-      setRemainingSeconds(null);
-      return undefined;
+      const timeout = setTimeout(() => {
+        setError("Invalid quiz time limit.");
+      }, 0);
+
+      return () => {
+        clearTimeout(timeout);
+      };
     }
 
     /*
-     * Calculate the exact expiry time.
+     * Calculate exact expiry time.
      */
     const endTime = startedAt.getTime() + timeLimitMinutes * 60 * 1000;
+
+    let timer;
 
     /*
      * Calculate remaining time.
      */
-    const calculateRemainingTime = () => {
+    const updateTimer = () => {
       const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
 
       setRemainingSeconds(remaining);
 
-      return remaining;
-    };
-
-    /*
-     * Initial timer calculation.
-     */
-    const initialRemaining = calculateRemainingTime();
-
-    /*
-     * =======================================================
-     * ALREADY EXPIRED
-     * =======================================================
-     *
-     * Only submit when we KNOW the calculated time is actually
-     * zero or less.
-     */
-    if (Number.isFinite(initialRemaining) && initialRemaining <= 0) {
       /*
-       * Prevent duplicate automatic submissions.
+       * Automatically submit when timer reaches zero.
        */
-      if (autoSubmitAttemptId.current !== attempt.id) {
-        autoSubmitAttemptId.current = attempt.id;
-
-        submitQuiz(false);
-      }
-
-      return undefined;
-    }
-
-    /*
-     * =======================================================
-     * RUN TIMER
-     * =======================================================
-     */
-    const timer = setInterval(() => {
-      const remaining = calculateRemainingTime();
-
-      /*
-       * Only auto-submit when remaining time is genuinely zero.
-       */
-      if (Number.isFinite(remaining) && remaining <= 0) {
+      if (remaining <= 0) {
         clearInterval(timer);
 
-        /*
-         * Prevent duplicate automatic submission.
-         */
         if (autoSubmitAttemptId.current !== attempt.id) {
           autoSubmitAttemptId.current = attempt.id;
 
           submitQuiz(false);
         }
       }
+    };
+
+    /*
+     * Initial calculation is deliberately asynchronous.
+     *
+     * This prevents the React set-state-in-effect warning.
+     */
+    const initialTimer = setTimeout(() => {
+      updateTimer();
+    }, 0);
+
+    /*
+     * Continue updating every second.
+     */
+    timer = setInterval(() => {
+      updateTimer();
     }, 1000);
 
     /*
-     * Cleanup timer.
+     * Cleanup.
      */
     return () => {
+      clearTimeout(initialTimer);
       clearInterval(timer);
     };
-  }, [attempt?.id, attempt?.startedAt, quiz?.timeLimit, submitted]);
+  }, [attempt?.id, attempt?.startedAt, quiz?.timeLimit, submitted, submitQuiz]);
 
   /*
    * =========================================================
@@ -488,6 +475,7 @@ function StudentQuiz() {
      */
     if (questions.length === 0) {
       setError("This quiz does not have any questions yet.");
+
       return;
     }
 
