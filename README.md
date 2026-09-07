@@ -11,9 +11,6 @@ The application provides course management, video-based lessons, quizzes, studen
 **Frontend:**
 https://lms-microservices-zeta.vercel.app/
 
-**API Gateway:**
-https://lms-api-gateway-9lpv.onrender.com/
-
 ---
 
 ## 🔄 Wake Up Backend Services Before Using the Application
